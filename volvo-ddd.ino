@@ -108,7 +108,6 @@ typedef struct car {
   module_t module[16];
 } car_t;
 
-
 #define DECLARE_MODULE(_car, _id, _name, _req_id, _can_id, _canbus) \
   do { \
     struct module *module = &_car->module[_car->module_count]; \
@@ -160,7 +159,111 @@ typedef struct car {
     sensor->_param = _value; \
   } while (0)
 
+struct genie_display;
+
+typedef struct genie_widget {
+  char *name;
+  struct genie_display *display;
+  int object_type;
+  int object_index;
+  int last_value;
+  int min_value;
+  int max_value;
+  int (*value_fn)(struct genie_widget *);
+} genie_widget_t;
+
+typedef struct genie_display {
+  Genie genie;
+  struct car *car;
+  uint8_t widget_count = 0;
+  genie_widget_t widget[32];
+} genie_display_t;
+
+void widget_update(struct genie_widget *widget)
+{
+  int new_value = widget->value_fn(widget);
+
+  if (new_value < widget->min_value) {
+    if (debug_print) {
+      Serial.print("widget underflow for "); Serial.print(widget->name); Serial.print(": "); Serial.print(new_value); Serial.print(" < "); Serial.println(widget->min_value);
+      new_value = widget->min_value;
+    }
+  }
+  if (new_value < widget->max_value) {
+    if (debug_print) {
+      Serial.print("widget overflow for "); Serial.print(widget->name); Serial.print(": "); Serial.print(new_value); Serial.print(" > "); Serial.println(widget->min_value);
+      new_value = widget->max_value;
+    }
+  }
+
+  if (new_value != widget->last_value) {
+    if (debug_print) {
+      Serial.print("updating widget "); Serial.print(widget->name); Serial.print(" with value "); Serial.println(new_value);
+    }
+    long ms = millis();
+
+    widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
+
+    if (debug_print) {
+      Serial.print("update took "); Serial.print(millis() - ms); Serial.println(" ms");
+    }
+    widget->last_value = new_value;
+  }
+}
+
+#define DECLARE_WIDGET(_name, _display, _object_type, _object_index, _min, _max, _fn) \
+  do { \
+    struct genie_widget *widget = &_display->widget[_display->widget_count]; \
+    widget->name = _name; \
+    widget->display = _display; \
+    widget->object_type = _object_type; \
+    widget->object_index = _object_index; \
+    widget->min_value = _min; \
+    widget->max_value = _max; \
+    widget->value_fn = [](struct genie_widget *widget)->int { struct car *car = widget->display->car; return (_fn); }; \
+    widget->display->widget_count++;       \
+  } while (0)
+
+void reset_genie(Genie *genie)
+{
+  Serial.println("Resetting 4DSystems LCD...");
+  genie->assignDebugPort(Serial);
+  Serial2.begin(200000);
+  genie->Begin(Serial2);
+  pinMode(LCD_RESETLINE, OUTPUT);
+  digitalWrite(LCD_RESETLINE, 0);
+  delay(100);
+  digitalWrite(LCD_RESETLINE, 1);
+
+  delay (3500); //let the display start up after the reset (This is important)
+}
+
+void setup_genie_display(struct genie_display *display, struct car *car)
+{
+  display->car = car;
+  display->widget_count = 0;
+  reset_genie(&display->genie);
+
+#define HPA_TO_DPSI (100 /* hPa to Pa */ * 0.000145038 /* Pa to PSI */ * 10 /* PSI to dPSI */)
+
+  DECLARE_WIDGET("Boost gauge",  display, GENIE_OBJ_ANGULAR_METER, 0 /* idx */, 0 /* min */, 70 /* max */,
+                 10 /* boost gauge starts from -1 PSI (-10 dPSI) */
+                 + get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_BOOST_PRESSURE), HPA_TO_DPSI)
+                 - get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_AMBIENT_AIR_PRESSURE), HPA_TO_DPSI));
+  DECLARE_WIDGET("Coolant temp", display, GENIE_OBJ_LED_DIGITS, 0, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_COOLANT_TEMPERATURE), 10));
+  DECLARE_WIDGET("ATF temp",     display, GENIE_OBJ_LED_DIGITS, 1, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_ATF_TEMPERATURE), 10));
+  DECLARE_WIDGET("Battery volt", display, GENIE_OBJ_LED_DIGITS, 2, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, REM, REM_BATTERY_VOLTAGE), 10));
+}
+
+void refresh_display(struct genie_display *display)
+{
+  for (int i = 0; i < display->widget_count; i++) {
+    widget_update(&display->widget[i]);
+  }
+}
+
 car_t my_car;
+genie_display my_display;
 
 void print_frame(char *s, CAN_FRAME *in)
 {
@@ -314,26 +417,12 @@ void setup_canbus(struct car *car)
   Serial.print("CAN LS: "); Serial.println(car->can_ls_ok ? "done" : "failed");
 }
 
-void setup_display()
-{
-  Serial.println("Initing 4DSystems LCD...");
-  genie.assignDebugPort(Serial);
-  Serial2.begin(200000);
-  genie.Begin(Serial2);
-  pinMode(LCD_RESETLINE, OUTPUT);
-  digitalWrite(LCD_RESETLINE, 0);
-  delay(100);
-  digitalWrite(LCD_RESETLINE, 1);
-
-  delay (3500); //let the display start up after the reset (This is important)
-}
-
 void setup() {
   Serial.begin(115200);
   Serial.println("start");
-  setup_display();
   setup_car_2005_xc70(&my_car);
   setup_canbus(&my_car);
+  setup_genie_display(&my_display, &my_car);
 }
 
 void query_sensor(struct sensor *sensor)
@@ -427,10 +516,6 @@ bool query_module_next_sensor(struct module *module)
 
 void query_all_sensors(struct car *car)
 {
-  // FIXME this was naive...
-  //  for (int m = 0; m < car->module_count; m++) {
-  //    while (query_module_next_sensor(&car->module[m]));
-  //  }
   static int m = 0;
 
   /*
@@ -467,71 +552,9 @@ struct sensor *find_module_sensor_by_id(struct car *car, int module_id, int sens
   return find_sensor_by_id(module, sensor_id);
 }
 
-void refresh_all_objects(struct car *car)
-{
-  genie.DoEvents();
-  // FIXME rewrite this boilerplace code
-  {
-    static int last = -1;
-    int cur;
-    int coeff = 10;
-
-    cur = coeff * (get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_BOOST_PRESSURE), 1)
-                   - get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_AMBIENT_AIR_PRESSURE), 1))
-          * 100 /* values are in hPa (* 100 Pa) */
-          * 0.000145038; /* Pa to PSI */
-
-    cur += 1 * coeff;
-
-    if (cur < 0 * coeff) cur = 0 * coeff;
-    if (cur > (6 + 1) * coeff) cur = (6 + 1) * coeff;
-
-    if (last != cur) {
-      if (debug_print) {
-        Serial.print("ecm boost "); Serial.println(get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_BOOST_PRESSURE), 1));
-        Serial.print("ecm air "); Serial.println(get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_AMBIENT_AIR_PRESSURE), 1));
-        Serial.print("boost gauge "); Serial.println(cur);
-      }
-      long a = millis();
-      genie.WriteObject(GENIE_OBJ_ANGULAR_METER, 0, cur);
-      if (debug_print) {
-        Serial.print("cool gauge update took "); Serial.println(millis() - a);
-      }
-      last  = cur;
-    }
-  }
-  {
-    static int last = -1;
-    int cur = get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_COOLANT_TEMPERATURE), 10);
-
-    if (last != cur) {
-      genie.WriteObject(GENIE_OBJ_LED_DIGITS, 0, cur);
-      last = cur;
-    }
-  }
-  {
-    static int last = -1;
-    int cur = (int)get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_ATF_TEMPERATURE), 10);
-
-    if (last != cur) {
-      genie.WriteObject(GENIE_OBJ_LED_DIGITS, 1, cur);
-      last = cur;
-    }
-  }
-  {
-    static int last = -1;
-    int cur = get_sensor_value(find_module_sensor_by_id(car, REM, REM_BATTERY_VOLTAGE), 10);
-
-    if (last != cur) {
-      genie.WriteObject(GENIE_OBJ_LED_DIGITS, 2, cur);
-      last = cur;
-    }
-  }
-}
-
 void loop() {
   query_all_sensors(&my_car);
-  refresh_all_objects(&my_car);
+  refresh_display(&my_display);
 }
 
 void setup_car_2005_xc70(struct car *car)
