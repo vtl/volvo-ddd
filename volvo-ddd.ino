@@ -10,10 +10,12 @@ int debug_print = 0;
 
 #include <due_can.h>
 #include <genieArduino.h>
+#include <PrintEx.h>
 
 #define LCD_RESETLINE 2
 
 Genie genie;
+StreamEx SerialEx = Serial;
 
 /*
    known modules
@@ -144,7 +146,7 @@ typedef struct car {
     sensor->module = &_car->module[_module_id]; \
     sensor->value_type = _val_type; \
     sensor->match_fn = sensor->request_data[0] == 0xa6 ? match_a6_fn : match_a5_fn; \
-    sensor->convert_fn = [](struct sensor *sensor, CAN_FRAME *in) {/* print_frame(in); */_fn; }; \
+    sensor->convert_fn = [](struct sensor *sensor, CAN_FRAME *in) { _fn; }; \
     module->sensor_count++;       \
   } while (0)
 
@@ -184,29 +186,25 @@ void widget_update(struct genie_widget *widget)
   int new_value = widget->value_fn(widget);
 
   if (new_value < widget->min_value) {
-    if (debug_print) {
-      Serial.print("widget underflow for "); Serial.print(widget->name); Serial.print(": "); Serial.print(new_value); Serial.print(" < "); Serial.println(widget->min_value);
-      new_value = widget->min_value;
-    }
+    if (debug_print)
+      SerialEx.printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
+    new_value = widget->min_value;
   }
   if (new_value < widget->max_value) {
-    if (debug_print) {
-      Serial.print("widget overflow for "); Serial.print(widget->name); Serial.print(": "); Serial.print(new_value); Serial.print(" > "); Serial.println(widget->min_value);
-      new_value = widget->max_value;
-    }
+    if (debug_print)
+      SerialEx.printf("widget %d overflow: %d > %d\n", widget->name, new_value, widget->max_value);
+    new_value = widget->max_value;
   }
 
   if (new_value != widget->last_value) {
-    if (debug_print) {
-      Serial.print("updating widget "); Serial.print(widget->name); Serial.print(" with value "); Serial.println(new_value);
-    }
+    if (debug_print)
+      SerialEx.printf("updating widget %s %d -> %d\n", widget->name, new_value, widget->last_value);
     long ms = millis();
 
     widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
 
-    if (debug_print) {
-      Serial.print("update took "); Serial.print(millis() - ms); Serial.println(" ms");
-    }
+    if (debug_print)
+      SerialEx.printf("widget %s update took %d ms\n", widget->name, millis() - ms);
     widget->last_value = new_value;
   }
 }
@@ -226,7 +224,7 @@ void widget_update(struct genie_widget *widget)
 
 void reset_genie(Genie *genie)
 {
-  Serial.println("Resetting 4DSystems LCD...");
+  SerialEx.printf("Resetting 4DSystems LCD...\n");
   genie->assignDebugPort(Serial);
   Serial2.begin(200000);
   genie->Begin(Serial2);
@@ -268,15 +266,10 @@ genie_display my_display;
 void print_frame(char *s, CAN_FRAME *in)
 {
   if (debug_print) {
-    Serial.print(s);
-    Serial.print(" ID = ");
-    Serial.print(in->id, HEX);
-    Serial.print(": ");
-    for (int i = 0; i < 8; i++) {
-      Serial.print(in->data.byte[i], HEX);
-      Serial.print(" ");
-    }
-    Serial.println();
+    SerialEx.printf("CAN_FRAME for %s ID 0xlx: ", s, in->id);
+    for (int i = 0; i < 8; i++)
+      SerialEx.printf("0x02x ", in->data.byte[i]);
+    SerialEx.printf("\n");
   }
 }
 
@@ -301,9 +294,9 @@ struct module *find_module_by_id(struct car *car, int module_id)
   for (int m = 0; m < car->module_count; m++)
     if (car->module[m].id == module_id)
       return &car->module[m];
-  if (debug_print) {
-    Serial.print("can't find module by id "); Serial.println(module_id);
-  }
+  if (debug_print)
+    SerialEx.printf("can't find module by id %d\n", module_id);
+
   return NULL;
 }
 
@@ -312,9 +305,9 @@ struct sensor *find_sensor_by_id(struct module *module, int sensor_id)
   for (int s = 0; s < module->sensor_count; s++)
     if (module->sensor[s].id == sensor_id)
       return &module->sensor[s];
-  if (debug_print) {
-    Serial.print(module->name); Serial.print(": can't find sensor by id "); Serial.println(sensor_id);
-  }
+  if (debug_print)
+    SerialEx.printf("%s can't find sensor by id %d\n", module->name, sensor_id);
+
   return NULL;
 }
 
@@ -343,47 +336,17 @@ struct sensor *guess_sensor_by_reply(struct car *car, CAN_FRAME *in)
   return NULL;
 }
 
-void can_hs_callback(CAN_FRAME *in)
+void can_callback(CAN_FRAME *in)
 {
   sensor_t *sensor = guess_sensor_by_reply(&my_car, in);
 
   if (!sensor) {
-    print_frame("H unknown", in);
+    print_frame("unknown CAN frame", in);
     return;
   }
 
-  if (debug_print) {
-    Serial.print("got sensor ");
-    Serial.print((long)(void *)sensor, HEX);
-    Serial.print(" ");
-    Serial.println(sensor->name);
-  }
-
-  if (sensor->convert_fn)
-    sensor->convert_fn(sensor, in);
-  if (sensor->ack_cb)
-    sensor->ack_cb(sensor);
-  if (sensor->module->ack_cb)
-    sensor->module->ack_cb(sensor->module);
-  if (sensor->module->car->ack_cb)
-    sensor->module->car->ack_cb(sensor->module->car);
-}
-
-void can_ls_callback(CAN_FRAME *in)
-{
-  sensor_t *sensor = guess_sensor_by_reply(&my_car, in);
-
-  if (!sensor) {
-    print_frame("L unknown", in);
-    return;
-  }
-
-  if (debug_print) {
-    Serial.print("got sensor ");
-    Serial.print((long)(void *)sensor, HEX);
-    Serial.print(" ");
-    Serial.println(sensor->name);
-  }
+  if (debug_print)
+    SerialEx.printf("got sensor %s\n", sensor->name);
 
   if (sensor->convert_fn)
     sensor->convert_fn(sensor, in);
@@ -400,7 +363,7 @@ void setup_canbus(struct car *car)
   module_t *module;
   int i;
 
-  Serial.print("setup CAN-bus... ");
+  SerialEx.printf("setup CAN-bus...\n");
 
   car->can_hs_ok = Can0.begin(car->can_hs_rate);
   car->can_ls_ok = Can1.begin(car->can_ls_rate);
@@ -410,16 +373,16 @@ void setup_canbus(struct car *car)
     module->canbus->setRXFilter(module->can_id, 0x1fffff, true);
   }
 
-  Can0.setGeneralCallback(can_hs_callback);
-  Can1.setGeneralCallback(can_ls_callback);
+  Can0.setGeneralCallback(can_callback);
+  Can1.setGeneralCallback(can_callback);
 
-  Serial.print("CAN HS: "); Serial.println(car->can_hs_ok ? "done" : "failed");
-  Serial.print("CAN LS: "); Serial.println(car->can_ls_ok ? "done" : "failed");
+  SerialEx.printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
+  SerialEx.printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("start");
+  SerialEx.printf("start\n");
   setup_car_2005_xc70(&my_car);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
@@ -429,7 +392,8 @@ void query_sensor(struct sensor *sensor)
 {
   CAN_FRAME out;
 
-  if (debug_print) Serial.println(sensor->name);
+  if (debug_print)
+    SerialEx.printf("query %s\n", sensor->name);
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -559,7 +523,7 @@ void loop() {
 
 void setup_car_2005_xc70(struct car *car)
 {
-  Serial.print("setup 2005 XC70... ");
+  SerialEx.printf("setup 2005 XC70... ");
 
   car->can_hs_rate = CAN_BPS_500K;
   car->can_ls_rate = CAN_BPS_125K;
@@ -592,6 +556,6 @@ void setup_car_2005_xc70(struct car *car)
 
   DECLARE_MODULE(car, REM, "Rear electronic module (REM)", 0x46, 0x00800401, Can1);
   DECLARE_SENSOR(car, REM, REM_BATTERY_VOLTAGE,      "Battery voltage",      ARRAY(0xa6, 0xd0, 0xd4, 0x01), VALUE_FLOAT, (sensor->value.v_float = in->data.bytes[5] / 8.0));
-  Serial.println("done");
+  SerialEx.printf("done\n");
 }
 
