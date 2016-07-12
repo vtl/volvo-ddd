@@ -189,8 +189,7 @@ void widget_update(struct genie_widget *widget)
     if (debug_print)
       SerialEx.printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
     new_value = widget->min_value;
-  }
-  if (new_value < widget->max_value) {
+  } else if (new_value > widget->max_value) {
     if (debug_print)
       SerialEx.printf("widget %d overflow: %d > %d\n", widget->name, new_value, widget->max_value);
     new_value = widget->max_value;
@@ -198,7 +197,7 @@ void widget_update(struct genie_widget *widget)
 
   if (new_value != widget->last_value) {
     if (debug_print)
-      SerialEx.printf("updating widget %s %d -> %d\n", widget->name, new_value, widget->last_value);
+      SerialEx.printf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
     long ms = millis();
 
     widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
