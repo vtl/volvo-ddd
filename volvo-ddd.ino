@@ -516,7 +516,7 @@ void query_all_sensors(struct car *car)
     m++;
 }
 
-long get_sensor_value(struct sensor *sensor, int multiplier)
+long get_sensor_value(struct sensor *sensor, float multiplier)
 {
   if (sensor->value_type == VALUE_INT)
     return sensor->value.v_int * multiplier;
