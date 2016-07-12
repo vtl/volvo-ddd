@@ -43,5 +43,18 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, SWM, "SWM", 0x00, 0x0131726c, CAN_LS);
-  DECLARE_SENSOR(car, SWM, SWM_AUDIO_CONTROLS,      "Audio controls",      ARRAY(0), VALUE_INT, (sensor->value.v_int = in->data.bytes[7] & 0xf));
+  DECLARE_SENSOR(car, SWM, SWM_AUDIO_CONTROLS,       "Audio controls",      ARRAY(0), VALUE_INT, (sensor->value.v_int = in->data.bytes[7] & 0xf));
+  SET_SENSOR_PARAM(car, SWM, SWM_AUDIO_CONTROLS, ack_cb, swm_audio_controls_cb);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  DECLARE_MODULE(car, CCM, "CCM", 0x00, 0x02803008, CAN_LS);
+  DECLARE_SENSOR(car, CCM, CCM_AMBIENT_LIGHT,        "Ambient light",       ARRAY(0), VALUE_INT, (sensor->value.v_int = !!(in->data.bytes[3] >> 4)));
+  SET_SENSOR_PARAM(car, CCM, CCM_AMBIENT_LIGHT, ack_cb, ccm_ambient_light_cb);
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  DECLARE_MODULE(car, CEM, "CEM", 0x00, 0x03200408, CAN_LS);
+  DECLARE_SENSOR(car, CEM, CEM_GEARBOX_POSITION,     "Gearbox position",    ARRAY(0), VALUE_INT, (sensor->value.v_int = (in->data.bytes[6] & 0x30) >> 4));
+  SET_SENSOR_PARAM(car, CEM, CEM_GEARBOX_POSITION, ack_cb, cem_gearbox_position_cb);
 

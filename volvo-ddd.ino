@@ -552,6 +552,21 @@ struct sensor *find_module_sensor_by_id(struct car *car, int module_id, int sens
   return find_sensor_by_id(module, sensor_id);
 }
 
+void swm_audio_controls_cb(struct sensor *sensor)
+{
+  // FIXME
+}
+
+void ccm_ambient_light_cb(struct sensor *sensor)
+{
+  // FIXME
+}
+
+void cem_gearbox_position_cb(struct sensor *sensor)
+{
+  // FIXME
+}
+
 void loop() {
   query_all_sensors(&my_car);
   refresh_display(&my_display);
