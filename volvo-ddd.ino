@@ -30,7 +30,10 @@ enum {
   ECM,
   TCM,
   DEM,
-  REM
+  REM,
+  SWM,
+  CCM,
+  CEM,
 };
 
 /*
@@ -56,6 +59,18 @@ enum {
 
 enum {
   REM_BATTERY_VOLTAGE
+};
+
+enum {
+  SWM_AUDIO_CONTROLS
+};
+
+enum {
+  CEM_GEARBOX_POSITION
+};
+
+enum {
+  CCM_AMBIENT_LIGHT
 };
 
 /*
@@ -411,7 +426,7 @@ void query_sensor(struct sensor *sensor)
   CAN_FRAME out;
 
   if (debug_print)
-    SerialEx.printf("query %s\n", sensor->name);
+    SerialEx.printf("query %s:%s\n", sensor->module->name, sensor->name);
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -433,6 +448,9 @@ void query_sensor(struct sensor *sensor)
 */
 bool query_module_next_sensor(struct module *module)
 {
+  /* module sends updates on its own */
+  if (module->req_id == 0)
+    return false;
   /*
      something is wrong, module was not queried for 1 second. unblock and go
   */
