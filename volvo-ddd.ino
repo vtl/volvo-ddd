@@ -8,6 +8,9 @@
 
 int debug_print = 0;
 
+#define WIDGETS "data/widgets_v1.h"
+#define CAR "data/2005_xc70_b5254t2_aw55_us.h"
+
 #include <due_can.h>
 #include <genieArduino.h>
 #include <PrintEx.h>
@@ -16,6 +19,9 @@ int debug_print = 0;
 
 Genie genie;
 StreamEx SerialEx = Serial;
+
+#define CAN_HS Can0
+#define CAN_LS Can1
 
 /*
    known modules
@@ -99,6 +105,7 @@ typedef struct module {
 } module_t;
 
 typedef struct car {
+  char *name;
   bool can_hs_ok = false;
   bool can_ls_ok = false;
   int can_hs_rate;
@@ -109,6 +116,19 @@ typedef struct car {
   int module_count = 0;
   module_t module[16];
 } car_t;
+
+#define DECLARE_CAR(_car, _name, _can_hs_rate, _can_ls_rate) \
+  do { \
+    _car->name = _name; \
+    _car->can_hs_rate = _can_hs_rate; \
+    _car->can_ls_rate = _can_ls_rate; \
+  } while (0)
+
+#define SET_CAR_PARAM(_car, _param, _value) \
+  do { \
+    struct car *car = _car; \
+    car->_param = _value; \
+  } while (0)
 
 #define DECLARE_MODULE(_car, _id, _name, _req_id, _can_id, _canbus) \
   do { \
@@ -223,7 +243,7 @@ void widget_update(struct genie_widget *widget)
 
 void reset_genie(Genie *genie)
 {
-  SerialEx.printf("Resetting 4DSystems LCD...\n");
+  SerialEx.printf("Resetting 4DSystems LCD... ");
   genie->assignDebugPort(Serial);
   Serial2.begin(200000);
   genie->Begin(Serial2);
@@ -233,6 +253,7 @@ void reset_genie(Genie *genie)
   digitalWrite(LCD_RESETLINE, 1);
 
   delay (3500); //let the display start up after the reset (This is important)
+  SerialEx.printf("done\n");
 }
 
 void setup_genie_display(struct genie_display *display, struct car *car)
@@ -241,15 +262,7 @@ void setup_genie_display(struct genie_display *display, struct car *car)
   display->widget_count = 0;
   reset_genie(&display->genie);
 
-#define HPA_TO_DPSI (100 /* hPa to Pa */ * 0.000145038 /* Pa to PSI */ * 10 /* PSI to dPSI */)
-
-  DECLARE_WIDGET("Boost gauge",  display, GENIE_OBJ_ANGULAR_METER, 0 /* idx */, 0 /* min */, 70 /* max */,
-                 10 /* boost gauge starts from -1 PSI (-10 dPSI) */
-                 + get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_BOOST_PRESSURE), HPA_TO_DPSI)
-                 - get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_AMBIENT_AIR_PRESSURE), HPA_TO_DPSI));
-  DECLARE_WIDGET("Coolant temp", display, GENIE_OBJ_LED_DIGITS, 0, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_COOLANT_TEMPERATURE), 10));
-  DECLARE_WIDGET("ATF temp",     display, GENIE_OBJ_LED_DIGITS, 1, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_ATF_TEMPERATURE), 10));
-  DECLARE_WIDGET("Battery volt", display, GENIE_OBJ_LED_DIGITS, 2, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, REM, REM_BATTERY_VOLTAGE), 10));
+#include WIDGETS
 }
 
 void refresh_display(struct genie_display *display)
@@ -379,10 +392,16 @@ void setup_canbus(struct car *car)
   SerialEx.printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
 }
 
+void setup_car(struct car *car)
+{
+#include CAR
+  SerialEx.printf("setup %s... done\n", car->name);
+}
+
 void setup() {
   Serial.begin(115200);
   SerialEx.printf("start\n");
-  setup_car_2005_xc70(&my_car);
+  setup_car(&my_car);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
 }
@@ -518,43 +537,5 @@ struct sensor *find_module_sensor_by_id(struct car *car, int module_id, int sens
 void loop() {
   query_all_sensors(&my_car);
   refresh_display(&my_display);
-}
-
-void setup_car_2005_xc70(struct car *car)
-{
-  SerialEx.printf("setup 2005 XC70... ");
-
-  car->can_hs_rate = CAN_BPS_500K;
-  car->can_ls_rate = CAN_BPS_125K;
-  car->ack_cb = [](struct car * car) {
-    car->acked = true;
-  }; //car_serialize_queries;
-
-  DECLARE_MODULE(car, ECM, "Engine control module (ECM)", 0x7a, 0x01200021, Can0);
-  SET_MODULE_PARAM(car, ECM, ack_cb, module_serialize_queries);
-
-  // that one is always 14.3...
-  //  DECLARE_SENSOR(car, ECM, ECM_BATTERY_VOLTAGE,      "Battery voltage",      ARRAY(0xa6, 0x15, 0x85, 0x01), VALUE_FLOAT, sensor->value.v_float = in->data.bytes[5] * 0.07);
-  DECLARE_SENSOR(car, ECM, ECM_COOLANT_TEMPERATURE,  "Coolant temperature",  ARRAY(0xa6, 0x10, 0xb8, 0x01), VALUE_FLOAT, (sensor->value.v_float = in->data.bytes[5] * 0.7 - 48));
-  DECLARE_SENSOR(car, ECM, ECM_AMBIENT_AIR_PRESSURE, "Ambient air pressure", ARRAY(0xa6, 0x10, 0x05, 0x01), VALUE_INT, (sensor->value.v_int = in->data.bytes[5] * 5));
-  DECLARE_SENSOR(car, ECM, ECM_BOOST_PRESSURE,       "Boost pressure",       ARRAY(0xa6, 0x10, 0xef, 0x01), VALUE_FLOAT, (sensor->value.v_float = (256 * in->data.bytes[5] + in->data.bytes[6]) / 25.6 /*, print_frame("boost", in) */));
-  SET_SENSOR_PARAM(car, ECM, ECM_BOOST_PRESSURE, update_interval, 100);
-
-  // FIXME 0x10 0xef is a boost pressure, oil level is likely 0x10 0x07
-  // DECLARE_SENSOR(car, ECM, ECM_OIL_LEVEL,            "Oil level",            ARRAY(0xa6, 0x10, 0xef, 0x01), VALUE_FLOAT, (sensor->value.v_float = (256 * in->data.bytes[4] + in->data.bytes[5]) * 0.003));
-
-  DECLARE_MODULE(car, TCM, "Transmission control module (TCM)", 0x6e, 0x01200005, Can0);
-  DECLARE_SENSOR(car, TCM, TCM_ATF_TEMPERATURE,      "ATF temperature",      ARRAY(0xa5, 0x0c, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * in->data.bytes[6] + in->data.bytes[7])));
-  // FIXME remove, match fn is now autoguessed
-  //  SET_SENSOR_PARAM(car, TCM, TCM_ATF_TEMPERATURE, match_fn, match_a5_fn);
-
-  DECLARE_MODULE(car, DEM, "DEM", 0x1a, 0x01204001, Can0);
-  DECLARE_SENSOR(car, DEM, DEM_PUMP_CURRENT,         "Pump current",         ARRAY(0xa6, 0x00, 0x05, 0x01), VALUE_INT, (1 /* FIXME */));
-  // FIXME DEM_SOLENOID_CURRENT comes with DEM_PUMP_CURRENT
-  DECLARE_SENSOR(car, DEM, DEM_OIL_PRESSURE,         "Oil pressure",         ARRAY(0xa6, 0x00, 0x03, 0x01), VALUE_INT, (1 /* FIXME */));
-
-  DECLARE_MODULE(car, REM, "Rear electronic module (REM)", 0x46, 0x00800401, Can1);
-  DECLARE_SENSOR(car, REM, REM_BATTERY_VOLTAGE,      "Battery voltage",      ARRAY(0xa6, 0xd0, 0xd4, 0x01), VALUE_FLOAT, (sensor->value.v_float = in->data.bytes[5] / 8.0));
-  SerialEx.printf("done\n");
 }
 
