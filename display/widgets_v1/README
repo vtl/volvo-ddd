@@ -1,0 +1,9 @@
+Volvo-SAD.4DWork is 4DSystems Workshop IDE project.
+
+Copy these files to 4DSystem display's uSD/MMC card:
+
+RunFlash.4xe
+VOLVO-~1.dat
+VOLVO-~1.gci
+
+You may need to program your display to use bootloader from the card.
