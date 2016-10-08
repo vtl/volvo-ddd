@@ -545,12 +545,6 @@ struct sensor *find_module_sensor_by_id(struct car *car, int module_id, int sens
   return find_sensor_by_id(module, sensor_id);
 }
 
-
-
-
-
-
-
 enum {
   RADIO_EVENT_SWC,
   RADIO_EVENT_ILLUMI,
@@ -563,6 +557,7 @@ struct radio_command {
   char *name;
   int function;
   int param;
+  int mask;
   struct radio *radio;
   void (*fn)(struct radio_command *);
 };
@@ -585,13 +580,14 @@ typedef struct radio {
 
 struct radio my_radio;
 
-#define DECLARE_RADIO_COMMAND(_name, _radio, _function, _param, _fn) \
+#define DECLARE_RADIO_COMMAND(_name, _radio, _function, _param, _mask, _fn) \
   do { \
     struct radio *radio = _radio; \
     struct radio_command *command = &radio->command[radio->commands]; \
     command->name = _name; \
     command->function = _function; \
     command->param = _param; \
+    command->mask = _mask; \
     command->fn = [](struct radio_command *command) { _fn; }; \
     command->radio = radio; \
     radio->commands++; \
@@ -601,6 +597,8 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
 {
   struct radio *radio = command->radio;
 
+  if (radio->busy)
+    return;
   memcpy(radio->data, (const uint8_t[]) {
     0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0
   }, 25);
@@ -640,42 +638,59 @@ void radio_isr_send_bit_finish()
   digitalWrite(radio->control_pin, HIGH);
 }
 
+#define SWC_PIN     44
+#define ILLUMI_PIN  42
+#define PARK_PIN    40
+#define CAMERA_PIN  38
+
 void setup_radio(struct radio *radio)
 {
   radio->timer = &Timer6;
   radio->busy = false;
   radio->commands = 0;
-  radio->control_pin = 7;
-  radio->timer_delay = 100;
+  radio->control_pin = SWC_PIN;
+  radio->illumi_pin = ILLUMI_PIN;
+  radio->park_pin = PARK_PIN;
+  radio->camera_pin = CAMERA_PIN;
 
-  DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, 0b0101, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, 0b0101, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next disk",  &my_radio, RADIO_EVENT_SWC, 0b1010, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("next disk",  &my_radio, RADIO_EVENT_SWC, 0b1010, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("prev track", &my_radio, RADIO_EVENT_SWC, 0b0001, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("prev track", &my_radio, RADIO_EVENT_SWC, 0b0001, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next track", &my_radio, RADIO_EVENT_SWC, 0b0010, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("next track", &my_radio, RADIO_EVENT_SWC, 0b0010, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("vol down",   &my_radio, RADIO_EVENT_SWC, 0b0100, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("vol down",   &my_radio, RADIO_EVENT_SWC, 0b0100, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, 0b1000, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, 0b1000, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
+
+// Volvo: 1 - day, 0 - night
+// Kenwood: +12v - dimmer on
+// ULN2003A or NPN transistor reverse value (0 - +12v, 1 - 0v)
+
+  DECLARE_RADIO_COMMAND("dimmer on",  &my_radio, RADIO_EVENT_ILLUMI,  0b0, 0b1, digitalWrite(command->radio->illumi_pin, LOW));
+  DECLARE_RADIO_COMMAND("dimmer off", &my_radio, RADIO_EVENT_ILLUMI,  0b1, 0b1, digitalWrite(command->radio->illumi_pin, HIGH));
+
+  DECLARE_RADIO_COMMAND("P gear on",  &my_radio, RADIO_EVENT_GEARBOX, 0b01, 0b01, digitalWrite(command->radio->park_pin, LOW));
+  DECLARE_RADIO_COMMAND("P gear off", &my_radio, RADIO_EVENT_GEARBOX, 0b00, 0b01, digitalWrite(command->radio->park_pin, HIGH));
+
+  DECLARE_RADIO_COMMAND("R gear on",  &my_radio, RADIO_EVENT_GEARBOX, 0b10, 0b10, digitalWrite(command->radio->camera_pin, LOW));
+  DECLARE_RADIO_COMMAND("R gear off", &my_radio, RADIO_EVENT_GEARBOX, 0b00, 0b10, digitalWrite(command->radio->camera_pin, HIGH));
 }
 
 void radio_event(struct radio *radio, int function, int param)
 {
-  if (radio->busy)
-    return;
-
   for (int i = 0; i < radio->commands; i++) {
     struct radio_command *command = &radio->command[i];
-    if (command->function == function && command->param == param) {
+    if ((command->function == function) && ((command->param & command->mask) == param)) {
       if (debug_print)
         SerialEx.printf("key pressed: %s\n", command->name);
       command->fn(command);
@@ -699,12 +714,8 @@ void cem_gearbox_position_cb(struct sensor *sensor)
   radio_event(&my_radio, RADIO_EVENT_GEARBOX, get_sensor_value(sensor, 1));
 }
 
-
-
-
-
-
-void setup() {
+void setup()
+{
   Serial.begin(115200);
   SerialEx.printf("start\n");
   setup_car(&my_car);
@@ -713,12 +724,9 @@ void setup() {
   setup_radio(&my_radio);
 }
 
-
-void loop() {
-  radio_event(&my_radio, RADIO_EVENT_SWC, 0b0010);
-  
-  delay(10000);
-//  query_all_sensors(&my_car);
-//  refresh_display(&my_display);
+void loop()
+{
+  query_all_sensors(&my_car);
+  refresh_display(&my_display);
 }
 
