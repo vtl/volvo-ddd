@@ -8,13 +8,18 @@
 
 int debug_print = 0;
 
-#define WIDGETS "data/widgets_v1.h"
+#define WIDGETS "data/widgets_v2.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
 #include <due_can.h>
 #include <genieArduino.h>
 #include <PrintEx.h>
 #include <DueTimer.h>
+
+float temp_c_to_f(float c)
+{
+  return c * 1.8 + 32;
+}
 
 #define LCD_RESETLINE 2
 
@@ -44,8 +49,9 @@ enum {
   ECM_BATTERY_VOLTAGE,
   ECM_COOLANT_TEMPERATURE,
   ECM_AMBIENT_AIR_PRESSURE,
+  ECM_INTAKE_AIR_TEMPERATURE,
   ECM_BOOST_PRESSURE,
-  ECM_OIL_LEVEL
+  ECM_OIL_LEVEL,
 };
 
 enum {
