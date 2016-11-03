@@ -607,14 +607,14 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
   radio->cur_bit = 0;
   pinMode(radio->control_pin, OUTPUT);
   radio->timer->attachInterrupt(radio_isr_send_start).start(10);
-  digitalWrite(radio->control_pin, LOW);
+  digitalWrite(radio->control_pin, !LOW);
 }
 
 void radio_isr_send_start()
 {
   struct radio *radio = &my_radio;
   radio->timer->attachInterrupt(radio_isr_send_bit).start(4500);
-  digitalWrite(radio->control_pin, HIGH);
+  digitalWrite(radio->control_pin, !HIGH);
 }
 
 void radio_isr_send_bit()
@@ -627,7 +627,7 @@ void radio_isr_send_bit()
     return;
   }
   radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000);
-  digitalWrite(radio->control_pin, radio->data[radio->cur_bit++]);
+  digitalWrite(radio->control_pin, !radio->data[radio->cur_bit++]);
 }
 
 void radio_isr_send_bit_finish()
@@ -635,7 +635,7 @@ void radio_isr_send_bit_finish()
   struct radio *radio = &my_radio;
     radio->timer->stop();
   radio->timer->attachInterrupt(radio_isr_send_bit).start(200);
-  digitalWrite(radio->control_pin, HIGH);
+  digitalWrite(radio->control_pin, !HIGH);
 }
 
 #define SWC_PIN     44
