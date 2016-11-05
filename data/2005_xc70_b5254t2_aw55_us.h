@@ -17,7 +17,7 @@
   DECLARE_SENSOR(car, ECM, ECM_AMBIENT_AIR_PRESSURE, "Ambient air pressure", ARRAY(0xa6, 0x10, 0x05, 0x01), VALUE_INT, (sensor->value.v_int = in->data.bytes[5] * 5));
   DECLARE_SENSOR(car, ECM, ECM_BOOST_PRESSURE,       "Boost pressure",       ARRAY(0xa6, 0x10, 0xef, 0x01), VALUE_FLOAT, (sensor->value.v_float = (256 * in->data.bytes[5] + in->data.bytes[6]) / 25.6 /*, print_frame("boost", in) */));
   SET_SENSOR_PARAM(car, ECM, ECM_BOOST_PRESSURE, update_interval, 100);
-  DECLARE_SENSOR(car, ECM, ECM_INTAKE_AIR_TEMPERATURE, "Ambient air pressure", ARRAY(0xa6, 0x10, 0xaf, 0x01), VALUE_FLOAT, (sensor->value.v_float = in->data.bytes[5] * 0.75 - 48));
+  DECLARE_SENSOR(car, ECM, ECM_INTAKE_AIR_TEMPERATURE, "Ambient air temperature", ARRAY(0xa6, 0x10, 0xaf, 0x01), VALUE_FLOAT, (sensor->value.v_float = in->data.bytes[5] * 0.75 - 48));
 
   // FIXME 0x10 0xef is a boost pressure, oil level is likely 0x10 0x07
   // DECLARE_SENSOR(car, ECM, ECM_OIL_LEVEL,            "Oil level",            ARRAY(0xa6, 0x10, 0xef, 0x01), VALUE_FLOAT, (sensor->value.v_float = (256 * in->data.bytes[4] + in->data.bytes[5]) * 0.003));

@@ -187,7 +187,11 @@ typedef struct car {
     sensor->name = _name;     \
     sensor->module = &_car->module[_module_id]; \
     sensor->value_type = _val_type; \
-    sensor->match_fn = sensor->request_data[0] == 0xa6 ? match_a6_fn : match_a5_fn; \
+    switch (sensor->request_data[0]) { \
+      case 0xa6: sensor->match_fn = match_a6_fn; break; \
+      case 0xa5: sensor->match_fn = match_a5_fn; break; \
+      default:   sensor->match_fn = match_always_fn; break; \
+    } \
     sensor->convert_fn = [](struct sensor *sensor, CAN_FRAME *in) { _fn; }; \
     module->sensor_count++;       \
   } while (0)
@@ -233,7 +237,7 @@ void widget_update(struct genie_widget *widget)
     new_value = widget->min_value;
   } else if (new_value > widget->max_value) {
     if (debug_print)
-      SerialEx.printf("widget %d overflow: %d > %d\n", widget->name, new_value, widget->max_value);
+      SerialEx.printf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
     new_value = widget->max_value;
   }
 
@@ -270,11 +274,11 @@ void reset_genie(Genie *genie)
   Serial2.begin(200000);
   genie->Begin(Serial2);
   pinMode(LCD_RESETLINE, OUTPUT);
-  digitalWrite(LCD_RESETLINE, 0);
+  digitalWrite(LCD_RESETLINE, LOW);
   delay(100);
-  digitalWrite(LCD_RESETLINE, 1);
+  digitalWrite(LCD_RESETLINE, HIGH);
 
-  delay (3500); //let the display start up after the reset (This is important)
+  delay(3500); //let the display start up after the reset (This is important)
   SerialEx.printf("done\n");
 }
 
@@ -300,9 +304,9 @@ genie_display my_display;
 void print_frame(char *s, CAN_FRAME *in)
 {
   if (debug_print) {
-    SerialEx.printf("CAN_FRAME for %s ID 0xlx: ", s, in->id);
+    SerialEx.printf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
     for (int i = 0; i < 8; i++)
-      SerialEx.printf("0x02x ", in->data.byte[i]);
+      SerialEx.printf("0x%02x ", in->data.byte[i]);
     SerialEx.printf("\n");
   }
 }
@@ -321,6 +325,11 @@ bool match_a5_fn(struct sensor *sensor, CAN_FRAME *in)
 {
   return (in->data.byte[2] == (sensor->request_data[0] | 0x40) &&
           in->data.byte[3] == sensor->request_data[1]);
+}
+
+bool match_always_fn(struct sensor *sensor, CAN_FRAME *in)
+{
+  return true;
 }
 
 struct module *find_module_by_id(struct car *car, int module_id)
@@ -599,6 +608,8 @@ struct radio my_radio;
     radio->commands++; \
   } while (0)
 
+#define N 100
+
 void radio_send_bits(struct radio_command *command, const uint8_t bits[])
 {
   struct radio *radio = command->radio;
@@ -612,36 +623,42 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
   radio->busy = true;
   radio->cur_bit = 0;
   pinMode(radio->control_pin, OUTPUT);
-  radio->timer->attachInterrupt(radio_isr_send_start).start(10);
   digitalWrite(radio->control_pin, !LOW);
+  radio->timer->attachInterrupt(radio_isr_send_start).start(10000-N);
 }
 
 void radio_isr_send_start()
 {
   struct radio *radio = &my_radio;
-  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500);
   digitalWrite(radio->control_pin, !HIGH);
+  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500-N);
 }
 
 void radio_isr_send_bit()
 {
   struct radio *radio = &my_radio;
 
-  if (radio->cur_bit == 50) {
-    radio->timer->stop();
-    radio->busy = false;
-    return;
-  }
-  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000);
   digitalWrite(radio->control_pin, !radio->data[radio->cur_bit++]);
+  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000-N);
 }
 
 void radio_isr_send_bit_finish()
 {
   struct radio *radio = &my_radio;
-    radio->timer->stop();
-  radio->timer->attachInterrupt(radio_isr_send_bit).start(200);
+
   digitalWrite(radio->control_pin, !HIGH);
+  if (radio->cur_bit == 50)
+    radio->timer->attachInterrupt(radio_isr_stop).start(1000000);
+  else
+    radio->timer->attachInterrupt(radio_isr_send_bit).start(200-N);
+}
+
+void radio_isr_stop()
+{
+  struct radio *radio = &my_radio;
+
+  radio->timer->stop();
+  radio->busy = false;
 }
 
 #define SWC_PIN     44
@@ -659,22 +676,29 @@ void setup_radio(struct radio *radio)
   radio->park_pin = PARK_PIN;
   radio->camera_pin = CAMERA_PIN;
 
-  DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, 0b0101, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  pinMode(radio->control_pin, OUTPUT);
+  digitalWrite(radio->control_pin, LOW);
+  pinMode(radio->park_pin, OUTPUT);
+  digitalWrite(radio->park_pin, HIGH);
+  pinMode(radio->camera_pin, OUTPUT);
+  digitalWrite(radio->camera_pin, HIGH);
+
+  DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, 0b1010, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next disk",  &my_radio, RADIO_EVENT_SWC, 0b1010, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("next disk",  &my_radio, RADIO_EVENT_SWC, 0b0101, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("prev track", &my_radio, RADIO_EVENT_SWC, 0b0001, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("prev track", &my_radio, RADIO_EVENT_SWC, 0b1110, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next track", &my_radio, RADIO_EVENT_SWC, 0b0010, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("next track", &my_radio, RADIO_EVENT_SWC, 0b1101, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("vol down",   &my_radio, RADIO_EVENT_SWC, 0b0100, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("vol down",   &my_radio, RADIO_EVENT_SWC, 0b1011, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, 0b1000, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, 0b0111, 0b1111, radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
 
@@ -696,11 +720,10 @@ void radio_event(struct radio *radio, int function, int param)
 {
   for (int i = 0; i < radio->commands; i++) {
     struct radio_command *command = &radio->command[i];
-    if ((command->function == function) && ((command->param & command->mask) == param)) {
+    if ((command->function == function) && ((command->param & command->mask) == (param & command->mask))) {
       if (debug_print)
         SerialEx.printf("key pressed: %s\n", command->name);
       command->fn(command);
-      break;
     }
   }
 }
@@ -725,14 +748,16 @@ void setup()
   Serial.begin(115200);
   SerialEx.printf("start\n");
   setup_car(&my_car);
+  setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
-  setup_radio(&my_radio);
 }
 
 void loop()
 {
-  query_all_sensors(&my_car);
-  refresh_display(&my_display);
+  while (1) {
+    query_all_sensors(&my_car);
+    refresh_display(&my_display);
+  }
 }
 
