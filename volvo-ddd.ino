@@ -647,9 +647,10 @@ void radio_isr_send_bit_finish()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !HIGH);
-  if (radio->cur_bit == 50)
-    radio->timer->attachInterrupt(radio_isr_stop).start(1000000);
-  else
+  if (radio->cur_bit == 50) {
+//    radio->timer->attachInterrupt(radio_isr_stop).start(1000000);
+    radio_isr_stop();
+  } else
     radio->timer->attachInterrupt(radio_isr_send_bit).start(200-N);
 }
 
@@ -720,7 +721,7 @@ void radio_event(struct radio *radio, int function, int param)
 {
   for (int i = 0; i < radio->commands; i++) {
     struct radio_command *command = &radio->command[i];
-    if ((command->function == function) && ((command->param & command->mask) == (param & command->mask))) {
+    if ((command->function == function) && ((param & command->mask) == command->param)) {
       if (debug_print)
         SerialEx.printf("key pressed: %s\n", command->name);
       command->fn(command);
