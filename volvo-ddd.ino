@@ -6,9 +6,9 @@
    (c) 2016 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
-int debug_print = 0;
+int debug_print = 1;
 
-#define WIDGETS "data/widgets_v2.h"
+#define WIDGETS "data/widgets_v3.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
 #include <due_can.h>
@@ -119,6 +119,7 @@ typedef struct module {
   CANRaw *canbus;
   int update_interval = 0;
   long last_update;
+  long max_wait = 50;
   void (* ack_cb)(struct module *) = NULL;
   bool acked = true;
   int last_sensor = 0;
@@ -212,6 +213,7 @@ struct genie_display;
 typedef struct genie_widget {
   char *name;
   struct genie_display *display;
+  int screen;
   int object_type;
   int object_index;
   int last_value;
@@ -222,6 +224,7 @@ typedef struct genie_widget {
 
 typedef struct genie_display {
   Genie genie;
+  int current_screen = 0;
   struct car *car;
   uint8_t widget_count = 0;
   genie_widget_t widget[32];
@@ -254,11 +257,12 @@ void widget_update(struct genie_widget *widget)
   }
 }
 
-#define DECLARE_WIDGET(_name, _display, _object_type, _object_index, _min, _max, _fn) \
+#define DECLARE_WIDGET(_name, _display, _screen, _object_type, _object_index, _min, _max, _fn) \
   do { \
     struct genie_widget *widget = &_display->widget[_display->widget_count]; \
     widget->name = _name; \
     widget->display = _display; \
+    widget->screen = _screen; \
     widget->object_type = _object_type; \
     widget->object_index = _object_index; \
     widget->min_value = _min; \
@@ -278,7 +282,7 @@ void reset_genie(Genie *genie)
   delay(100);
   digitalWrite(LCD_RESETLINE, HIGH);
 
-  delay(3500); //let the display start up after the reset (This is important)
+  delay(5500); //let the display start up after the reset (This is important)
   SerialEx.printf("done\n");
 }
 
@@ -291,10 +295,16 @@ void setup_genie_display(struct genie_display *display, struct car *car)
 #include WIDGETS
 }
 
-void refresh_display(struct genie_display *display)
+void refresh_display(struct genie_display *display, int screen)
 {
+  if (screen != display->current_screen) {
+    SerialEx.printf("changing screen to %d\n", screen);
+    display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
+    display->current_screen = screen;
+  }
   for (int i = 0; i < display->widget_count; i++) {
-    widget_update(&display->widget[i]);
+    if (display->widget[i].screen == display->current_screen)
+      widget_update(&display->widget[i]);
   }
 }
 
@@ -460,9 +470,9 @@ bool query_module_next_sensor(struct module *module)
   if (module->req_id == 0)
     return false;
   /*
-     something is wrong, module was not queried for 1 second. unblock and go
+     something is wrong, module was not queried for too long. unblock and go
   */
-  if ((millis() - module->last_update) > 1000)
+  if ((millis() - module->last_update) > module->max_wait)
     module->acked = true;
   /*
      if module is serialized and previous query is in flight, return "can't queue"
@@ -571,9 +581,8 @@ struct radio;
 struct radio_command {
   char *name;
   int function;
-  int param;
-  int mask;
   struct radio *radio;
+  bool (*match_fn)(int);
   void (*fn)(struct radio_command *);
 };
 
@@ -595,14 +604,16 @@ typedef struct radio {
 
 struct radio my_radio;
 
-#define DECLARE_RADIO_COMMAND(_name, _radio, _function, _param, _mask, _fn) \
+#define EVENT_HIT(x, mask) ((param & (mask)) == (x))
+#define EVENT_MISS(x, mask) (!EVENT_HIT((x), (mask)))
+
+#define DECLARE_RADIO_COMMAND(_name, _radio, _function, _match_fn, _fn) \
   do { \
     struct radio *radio = _radio; \
     struct radio_command *command = &radio->command[radio->commands]; \
     command->name = _name; \
     command->function = _function; \
-    command->param = _param; \
-    command->mask = _mask; \
+    command->match_fn = [](int param)->bool { return _match_fn; }; \
     command->fn = [](struct radio_command *command) { _fn; }; \
     command->radio = radio; \
     radio->commands++; \
@@ -684,22 +695,22 @@ void setup_radio(struct radio *radio)
   pinMode(radio->camera_pin, OUTPUT);
   digitalWrite(radio->camera_pin, HIGH);
 
-  DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, 0b1010, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1010, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next disk",  &my_radio, RADIO_EVENT_SWC, 0b0101, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("next disk",  &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0101, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("prev track", &my_radio, RADIO_EVENT_SWC, 0b1110, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("prev track", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1110, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next track", &my_radio, RADIO_EVENT_SWC, 0b1101, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("next track", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1101, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("vol down",   &my_radio, RADIO_EVENT_SWC, 0b1011, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("vol down",   &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1011, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, 0b0111, 0b1111, radio_send_bits(command, (const uint8_t[]) {
+  DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0111, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
 
@@ -707,21 +718,21 @@ void setup_radio(struct radio *radio)
 // Kenwood: +12v - dimmer on
 // ULN2003A or NPN transistor reverse value (0 - +12v, 1 - 0v)
 
-  DECLARE_RADIO_COMMAND("dimmer on",  &my_radio, RADIO_EVENT_ILLUMI,  0b0, 0b1, digitalWrite(command->radio->illumi_pin, LOW));
-  DECLARE_RADIO_COMMAND("dimmer off", &my_radio, RADIO_EVENT_ILLUMI,  0b1, 0b1, digitalWrite(command->radio->illumi_pin, HIGH));
+  DECLARE_RADIO_COMMAND("dimmer on",  &my_radio, RADIO_EVENT_ILLUMI,  EVENT_HIT (0b0, 0b1), digitalWrite(command->radio->illumi_pin, LOW));
+  DECLARE_RADIO_COMMAND("dimmer off", &my_radio, RADIO_EVENT_ILLUMI,  EVENT_MISS(0b1, 0b1), digitalWrite(command->radio->illumi_pin, HIGH));
 
-  DECLARE_RADIO_COMMAND("P gear on",  &my_radio, RADIO_EVENT_GEARBOX, 0b01, 0b01, digitalWrite(command->radio->park_pin, LOW));
-  DECLARE_RADIO_COMMAND("P gear off", &my_radio, RADIO_EVENT_GEARBOX, 0b00, 0b01, digitalWrite(command->radio->park_pin, HIGH));
+  DECLARE_RADIO_COMMAND("P gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b01, 0b11), digitalWrite(command->radio->park_pin, LOW));
+  DECLARE_RADIO_COMMAND("P gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b01, 0b11), digitalWrite(command->radio->park_pin, HIGH));
 
-  DECLARE_RADIO_COMMAND("R gear on",  &my_radio, RADIO_EVENT_GEARBOX, 0b10, 0b10, digitalWrite(command->radio->camera_pin, LOW));
-  DECLARE_RADIO_COMMAND("R gear off", &my_radio, RADIO_EVENT_GEARBOX, 0b00, 0b10, digitalWrite(command->radio->camera_pin, HIGH));
+  DECLARE_RADIO_COMMAND("R gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b10, 0b11), digitalWrite(command->radio->camera_pin, LOW));
+  DECLARE_RADIO_COMMAND("R gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b10, 0b11), digitalWrite(command->radio->camera_pin, HIGH));
 }
 
 void radio_event(struct radio *radio, int function, int param)
 {
   for (int i = 0; i < radio->commands; i++) {
     struct radio_command *command = &radio->command[i];
-    if ((command->function == function) && ((param & command->mask) == command->param)) {
+    if ((command->function == function) && command->match_fn(param)) {
       if (debug_print)
         SerialEx.printf("key pressed: %s\n", command->name);
       command->fn(command);
@@ -758,7 +769,7 @@ void loop()
 {
   while (1) {
     query_all_sensors(&my_car);
-    refresh_display(&my_display);
+    refresh_display(&my_display, 0);
   }
 }
 
