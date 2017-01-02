@@ -310,6 +310,7 @@ void refresh_display(struct genie_display *display, int screen)
 
 car_t my_car;
 genie_display my_display;
+int current_screen = 0;
 
 void print_frame(char *s, CAN_FRAME *in)
 {
@@ -694,6 +695,8 @@ void setup_radio(struct radio *radio)
   digitalWrite(radio->park_pin, HIGH);
   pinMode(radio->camera_pin, OUTPUT);
   digitalWrite(radio->camera_pin, HIGH);
+  pinMode(radio->illumi_pin, OUTPUT);
+  digitalWrite(radio->illumi_pin, LOW);
 
   DECLARE_RADIO_COMMAND("prev disk",  &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1010, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 1, 0
@@ -713,6 +716,7 @@ void setup_radio(struct radio *radio)
   DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0111, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
+  DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
 
 // Volvo: 1 - day, 0 - night
 // Kenwood: +12v - dimmer on
@@ -726,6 +730,25 @@ void setup_radio(struct radio *radio)
 
   DECLARE_RADIO_COMMAND("R gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b10, 0b11), digitalWrite(command->radio->camera_pin, LOW));
   DECLARE_RADIO_COMMAND("R gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b10, 0b11), digitalWrite(command->radio->camera_pin, HIGH));
+}
+
+static int screen_arm_busy = false;
+static DueTimer *screen_arm_timer = &Timer7;
+
+void radio_arm_next_screen()
+{
+  if (screen_arm_busy)
+    return;
+
+  screen_arm_busy = true;
+  screen_arm_timer->attachInterrupt(radio_unarm_next_screen).start(1000000);
+  current_screen = ++current_screen % 5;
+}
+
+void radio_unarm_next_screen()
+{
+  screen_arm_timer->stop();
+  screen_arm_busy = false;
 }
 
 void radio_event(struct radio *radio, int function, int param)
@@ -769,7 +792,7 @@ void loop()
 {
   while (1) {
     query_all_sensors(&my_car);
-    refresh_display(&my_display, 0);
+    refresh_display(&my_display, current_screen);
   }
 }
 
