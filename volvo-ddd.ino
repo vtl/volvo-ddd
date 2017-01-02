@@ -129,6 +129,7 @@ typedef struct module {
 
 typedef struct car {
   char *name;
+  bool can_poll = true;
   bool can_hs_ok = false;
   bool can_ls_ok = false;
   int can_hs_rate;
@@ -537,6 +538,8 @@ void query_all_sensors(struct car *car)
 {
   static int m = 0;
 
+  if (!car->can_poll)
+    return;
   /*
      something is wrong, car was not queried for 0.1 second. unblock and go
   */
@@ -717,6 +720,7 @@ void setup_radio(struct radio *radio)
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
   DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
+  DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_toggle_canbus());
 
 // Volvo: 1 - day, 0 - night
 // Kenwood: +12v - dimmer on
@@ -741,14 +745,25 @@ void radio_arm_next_screen()
     return;
 
   screen_arm_busy = true;
-  screen_arm_timer->attachInterrupt(radio_unarm_next_screen).start(1000000);
+  screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
   current_screen = ++current_screen % 5;
 }
 
-void radio_unarm_next_screen()
+void radio_unarm_delay()
 {
   screen_arm_timer->stop();
   screen_arm_busy = false;
+}
+
+void radio_toggle_canbus()
+{
+  if (screen_arm_busy)
+    return;
+
+  screen_arm_busy = true;
+  screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
+
+  my_car.can_poll = !my_car.can_poll;
 }
 
 void radio_event(struct radio *radio, int function, int param)
