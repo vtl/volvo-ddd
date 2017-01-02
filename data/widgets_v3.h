@@ -14,7 +14,7 @@ DECLARE_WIDGET("ATF temp",     display, 0, GENIE_OBJ_LED_DIGITS, 1, 0, 65535, te
 DECLARE_WIDGET("Intake air temp", display, 0, GENIE_OBJ_LED_DIGITS, 2, 0, 65535, temp_c_to_f(get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_INTAKE_AIR_TEMPERATURE), 1)) * 10);
 
 // MAIN MET
-#define HPA_TO_HBAR (100 /* hPa to Pa */ * 0.000001 /* Pa to BAR */ * 100 /* BAR to hBAR */)
+#define HPA_TO_HBAR (100 /* hPa to Pa */ * 0.00001 /* Pa to BAR */ * 100 /* BAR to hBAR */)
 
 DECLARE_WIDGET("Boost gauge",  display, 1, GENIE_OBJ_ANGULAR_METER, 1 /* idx */, 0 /* min */, 90 /* max */,
                0 /* boost gauge starts from 0 BAR */
