@@ -25,14 +25,59 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, TCM, "TCM", 0x6e, 0x01200005, CAN_HS);
+  SET_MODULE_PARAM(car, TCM, update_interval, 250);
   DECLARE_SENSOR(car, TCM, TCM_ATF_TEMPERATURE,      "ATF temperature",      ARRAY(0xa5, 0x0c, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * in->data.bytes[6] + in->data.bytes[7])));
-  // FIXME remove, match fn is now autoguessed
-  //  SET_SENSOR_PARAM(car, TCM, TCM_ATF_TEMPERATURE, match_fn, match_a5_fn);
+  SET_SENSOR_PARAM(car, TCM, TCM_ATF_TEMPERATURE, update_interval, 1000);
+  DECLARE_SENSOR(car, TCM, TCM_S1_STATUS,            "S1 solenoid status",   ARRAY(0xa5, 0x06, 0x01),       VALUE_INT, (sensor->value.v_int = in->data.bytes[4]));
+  DECLARE_SENSOR(car, TCM, TCM_S2_STATUS,            "S2 solenoid status",   ARRAY(0xa5, 0x07, 0x01),       VALUE_INT, (sensor->value.v_int = in->data.bytes[4]));
+  DECLARE_SENSOR(car, TCM, TCM_S3_STATUS,            "S3 solenoid status",   ARRAY(0xa5, 0x20, 0x01),       VALUE_INT, (sensor->value.v_int = in->data.bytes[4]));
+  DECLARE_SENSOR(car, TCM, TCM_S4_STATUS,            "S4 solenoid status",   ARRAY(0xa5, 0x21, 0x01),       VALUE_INT, (sensor->value.v_int = in->data.bytes[4]));
+  DECLARE_SENSOR(car, TCM, TCM_S5_STATUS,            "S5 solenoid status",   ARRAY(0xa5, 0x22, 0x01),       VALUE_INT, (sensor->value.v_int = in->data.bytes[4]));
+  DECLARE_SENSOR(car, TCM, TCM_SLT_CURRENT,          "SLT solenoid current", ARRAY(0xa5, 0xb2, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * in->data.bytes[4] + in->data.bytes[5])));
+  DECLARE_SENSOR(car, TCM, TCM_SLS_CURRENT,          "SLS solenoid current", ARRAY(0xa5, 0xb3, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * in->data.bytes[4] + in->data.bytes[5])));
+  DECLARE_SENSOR(car, TCM, TCM_SLU_CURRENT,          "SLU solenoid current", ARRAY(0xa5, 0xb4, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * in->data.bytes[4] + in->data.bytes[5])));
+
+/*
+S 12345
+P 00000
+R 00101
+N 00000
+1 11100
+2 00100
+3 00110
+4 00010
+5 01010
+L 00000
+int map = get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S1_STATUS), 1 << 4) |
+          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S2_STATUS), 1 << 3) |
+          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S4_STATUS), 1 << 2) |
+          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S3_STATUS), 1 << 1) |
+          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S5_STATUS), 1 << 0);
+
+switch (map) {
+case 0b00000:
+    return 'N';
+case 0b00101:
+    return 'R';
+case 0b11100:
+    return '1';
+case 0b00100:
+    return '2';
+case 0b00110:
+    return '3';
+case 0b00010:
+    return '4';
+case 0b01010:
+    return '5';
+};
+
+*/
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, DEM, "DEM", 0x1a, 0x01204001, CAN_HS);
-  DECLARE_SENSOR(car, DEM, DEM_PUMP_CURRENT,         "Pump current",         ARRAY(0xa6, 0x00, 0x05, 0x01), VALUE_INT, (1 /* FIXME */));
+  DECLARE_SENSOR(car, DEM, DEM_PUMP_CURRENT,         "Pump current",         ARRAY(0xa6, 0x00, 0x05, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * in->data.bytes[5] + in->data.bytes[6])));
+  DECLARE_SENSOR(car, DEM, DEM_SOLENOID_CURRENT,     "Solenoid current",     ARRAY(0),                      VALUE_INT, (1 /* FIXME */));
   // FIXME DEM_SOLENOID_CURRENT comes with DEM_PUMP_CURRENT
   DECLARE_SENSOR(car, DEM, DEM_OIL_PRESSURE,         "Oil pressure",         ARRAY(0xa6, 0x00, 0x03, 0x01), VALUE_INT, (1 /* FIXME */));
 
@@ -58,4 +103,3 @@
   DECLARE_MODULE(car, CEM, "CEM", 0x00, 0x03200408, CAN_LS);
   DECLARE_SENSOR(car, CEM, CEM_GEARBOX_POSITION,     "Gearbox position",    ARRAY(0), VALUE_INT, (sensor->value.v_int = (in->data.bytes[6] & 0x30) >> 4));
   SET_SENSOR_PARAM(car, CEM, CEM_GEARBOX_POSITION, ack_cb, cem_gearbox_position_cb);
-

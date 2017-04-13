@@ -29,3 +29,12 @@ DECLARE_WIDGET("Battery volt", display, 2, GENIE_OBJ_LED_DIGITS, 7, 0, 65535, ge
 
 // TCM
 DECLARE_WIDGET("ATF temp",     display, 3, GENIE_OBJ_LED_DIGITS, 17, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_ATF_TEMPERATURE), 10));
+DECLARE_WIDGET("S1 status",    display, 3, GENIE_OBJ_LED, 0, 0, 1, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S1_STATUS), 1));
+DECLARE_WIDGET("S2 status",    display, 3, GENIE_OBJ_LED, 1, 0, 1, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S2_STATUS), 1));
+DECLARE_WIDGET("S3 status",    display, 3, GENIE_OBJ_LED, 2, 0, 1, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S3_STATUS), 1));
+DECLARE_WIDGET("S4 status",    display, 3, GENIE_OBJ_LED, 3, 0, 1, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S4_STATUS), 1));
+DECLARE_WIDGET("S5 status",    display, 3, GENIE_OBJ_LED, 4, 0, 1, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S5_STATUS), 1));
+
+DECLARE_WIDGET("SLT current",  display, 3, GENIE_OBJ_LED_DIGITS, 8, 0, 1200, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_SLT_CURRENT), 1));
+DECLARE_WIDGET("SLS current",  display, 3, GENIE_OBJ_LED_DIGITS, 9, 0, 1200, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_SLS_CURRENT), 1));
+DECLARE_WIDGET("SLU current",  display, 3, GENIE_OBJ_LED_DIGITS, 10, 0, 1200, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_SLU_CURRENT), 1));
