@@ -51,7 +51,8 @@ enum {
   ECM_AMBIENT_AIR_PRESSURE,
   ECM_INTAKE_AIR_TEMPERATURE,
   ECM_BOOST_PRESSURE,
-  ECM_OIL_LEVEL,
+  ECM_AC_PRESSURE,
+  ECM_FUEL_PRESSURE
 };
 
 enum {
@@ -64,6 +65,8 @@ enum {
   TCM_SLT_CURRENT,
   TCM_SLS_CURRENT,
   TCM_SLU_CURRENT,
+  TCM_ENGINE_TORQUE,
+  TCM_TORQUE_REDUCTION
 };
 
 enum {
@@ -102,7 +105,7 @@ struct module;
 
 typedef struct sensor {
   uint8_t id;
-  char *name;
+  const char *name;
   struct module *module;
   union {
     long v_int;
@@ -114,14 +117,14 @@ typedef struct sensor {
   uint8_t request_size;
   uint8_t *request_data;
   bool (* match_fn)(struct sensor *, CAN_FRAME *);
-  void (* convert_fn)(struct sensor *, CAN_FRAME *in);
+  void (* convert_fn)(struct sensor *, unsigned char *, int);
   void (* ack_cb)(struct sensor *) = NULL;
   bool acked = true;
 } sensor_t;
 
 typedef struct module {
   uint8_t id;
-  char *name;
+  const char *name;
   struct car *car;
   uint8_t req_id;
   uint32_t can_id;
@@ -137,7 +140,7 @@ typedef struct module {
 } module_t;
 
 typedef struct car {
-  char *name;
+  const char *name;
   bool can_poll = true;
   bool can_hs_ok = false;
   bool can_ls_ok = false;
@@ -201,9 +204,10 @@ typedef struct car {
     switch (sensor->request_data[0]) { \
       case 0xa6: sensor->match_fn = match_a6_fn; break; \
       case 0xa5: sensor->match_fn = match_a5_fn; break; \
+      case 0xff: sensor->match_fn = NULL; break; \
       default:   sensor->match_fn = match_always_fn; break; \
     } \
-    sensor->convert_fn = [](struct sensor *sensor, CAN_FRAME *in) { _fn; }; \
+    sensor->convert_fn = [](struct sensor *sensor, unsigned char *bytes, int len) { _fn; }; \
     module->sensor_count++;       \
   } while (0)
 
@@ -221,7 +225,7 @@ typedef struct car {
 struct genie_display;
 
 typedef struct genie_widget {
-  char *name;
+  const char *name;
   struct genie_display *display;
   int screen;
   int object_type;
@@ -322,12 +326,21 @@ car_t my_car;
 genie_display my_display;
 int current_screen = 0;
 
-void print_frame(char *s, CAN_FRAME *in)
+void print_frame(const char *s, CAN_FRAME *in)
 {
   if (debug_print) {
     SerialEx.printf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
     for (int i = 0; i < 8; i++)
       SerialEx.printf("0x%02x ", in->data.byte[i]);
+    SerialEx.printf("\n");
+  }
+}
+
+void dump_array(const unsigned char *p, int len)
+{
+  if (debug_print) {
+    for (int i = 0; i < len; i++)
+      SerialEx.printf("0x%02x ", p[i]);
     SerialEx.printf("\n");
   }
 }
@@ -413,13 +426,68 @@ void can_callback(CAN_FRAME *in)
     SerialEx.printf("got sensor %s\n", sensor->name);
 
   if (sensor->convert_fn)
-    sensor->convert_fn(sensor, in);
+    sensor->convert_fn(sensor, in->data.bytes, in->length);
   if (sensor->ack_cb)
     sensor->ack_cb(sensor);
   if (sensor->module->ack_cb)
     sensor->module->ack_cb(sensor->module);
   if (sensor->module->car->ack_cb)
     sensor->module->car->ack_cb(sensor->module->car);
+}
+
+unsigned char can_data[256];
+
+void can_callback1(CAN_FRAME *in)
+{
+  static sensor_t *sensor = NULL;
+  static int idx = 0;
+  int len;
+
+  if (in->data.bytes[0] & 0x80) {
+    sensor = guess_sensor_by_reply(&my_car, in);
+    if (!sensor) {
+      print_frame("unknown CAN frame", in);
+      return;
+    }
+    idx = 0;
+  }
+
+  if (!sensor)
+    return;
+
+  len = in->length;
+  if (idx + len >= sizeof(can_data)) {
+    if (debug_print) {
+      SerialEx.printf("dropped multiframe with len %d > %d\n", idx + len, sizeof(can_data));
+      sensor = NULL;
+      return;
+    }
+  }
+  print_frame("in", in);
+  SerialEx.printf("idx %d, len %d\n", idx, len);
+  memcpy(can_data + idx, in->data.bytes, len);
+  idx += len;
+
+  if ((in->data.bytes[0] & 0x40) == 0) {
+    return;
+  }
+
+  if (debug_print)
+    SerialEx.printf("got sensor %s\n", sensor->name);
+
+  if (debug_print)
+    dump_array(can_data, idx);
+
+  if (sensor->convert_fn)
+    sensor->convert_fn(sensor, can_data, idx);
+  if (sensor->ack_cb)
+    sensor->ack_cb(sensor);
+  if (sensor->module->ack_cb)
+    sensor->module->ack_cb(sensor->module);
+  if (sensor->module->car->ack_cb)
+    sensor->module->car->ack_cb(sensor->module->car);
+  sensor = NULL;
+  idx = 0;
 }
 
 void setup_canbus(struct car *car)
@@ -592,7 +660,7 @@ enum {
 struct radio;
 
 struct radio_command {
-  char *name;
+  const char *name;
   int function;
   struct radio *radio;
   bool (*match_fn)(int);
@@ -600,7 +668,7 @@ struct radio_command {
 };
 
 typedef struct radio {
-  char *name;
+  const char *name;
   void setup(struct car *car);
   void event(struct car *car, int event, int);
   int control_pin;
