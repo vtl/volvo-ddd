@@ -66,7 +66,8 @@ enum {
   TCM_SLS_CURRENT,
   TCM_SLU_CURRENT,
   TCM_ENGINE_TORQUE,
-  TCM_TORQUE_REDUCTION
+  TCM_TORQUE_REDUCTION,
+  TCM_CURRENT_GEAR
 };
 
 enum {
@@ -85,7 +86,8 @@ enum {
 };
 
 enum {
-  CEM_GEARBOX_POSITION
+  CEM_GEARBOX_POSITION,
+  CEM_GEARBOX_POSITION_S
 };
 
 enum {
@@ -97,7 +99,8 @@ enum {
 */
 enum {
   VALUE_INT,
-  VALUE_FLOAT
+  VALUE_FLOAT,
+  VALUE_STRING
 };
 
 struct sensor;
@@ -110,9 +113,10 @@ typedef struct sensor {
   union {
     long v_int;
     float v_float;
+    const char *v_string;
   } value;
   int value_type;
-  int update_interval = 1000;
+  int update_interval;
   long last_update;
   uint8_t request_size;
   uint8_t *request_data;
@@ -130,6 +134,7 @@ typedef struct module {
   uint32_t can_id;
   CANRaw *canbus;
   int update_interval = 0;
+  int sensor_default_update_interval = 1000;
   long last_update;
   long max_wait = 50;
   void (* ack_cb)(struct module *) = NULL;
@@ -208,6 +213,7 @@ typedef struct car {
       default:   sensor->match_fn = match_always_fn; break; \
     } \
     sensor->convert_fn = [](struct sensor *sensor, unsigned char *bytes, int len) { _fn; }; \
+    sensor->update_interval = module->sensor_default_update_interval; \
     module->sensor_count++;       \
   } while (0)
 
@@ -230,10 +236,10 @@ typedef struct genie_widget {
   int screen;
   int object_type;
   int object_index;
-  int last_value;
-  int min_value;
-  int max_value;
-  int (*value_fn)(struct genie_widget *);
+  long last_value;
+  long min_value;
+  long max_value;
+  long (*value_fn)(struct genie_widget *);
 } genie_widget_t;
 
 typedef struct genie_display {
@@ -244,27 +250,35 @@ typedef struct genie_display {
   genie_widget_t widget[32];
 } genie_display_t;
 
+#define GENIE_OBJ_STRING (-1)
+
 void widget_update(struct genie_widget *widget)
 {
-  int new_value = widget->value_fn(widget);
+  long new_value = widget->value_fn(widget);
 
-  if (new_value < widget->min_value) {
-    if (debug_print)
-      SerialEx.printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
-    new_value = widget->min_value;
-  } else if (new_value > widget->max_value) {
-    if (debug_print)
-      SerialEx.printf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
-    new_value = widget->max_value;
+  if (widget->object_type != GENIE_OBJ_STRING) {
+    if (new_value < widget->min_value) {
+      if (debug_print)
+        SerialEx.printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
+      new_value = widget->min_value;
+    } else if (new_value > widget->max_value) {
+      if (debug_print)
+        SerialEx.printf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
+      new_value = widget->max_value;
+    }
   }
-
   if (new_value != widget->last_value) {
     if (debug_print)
       SerialEx.printf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
     long ms = millis();
 
-    widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
-
+    if (widget->object_type == GENIE_OBJ_STRING) {
+      if (debug_print)
+        SerialEx.printf("string %d == '%s'\n", widget->object_index, (char *)new_value);
+      widget->display->genie.WriteStr(widget->object_index, (char *)new_value);
+    } else {
+      widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
+    }
     if (debug_print)
       SerialEx.printf("widget %s update took %d ms\n", widget->name, millis() - ms);
     widget->last_value = new_value;
@@ -281,7 +295,7 @@ void widget_update(struct genie_widget *widget)
     widget->object_index = _object_index; \
     widget->min_value = _min; \
     widget->max_value = _max; \
-    widget->value_fn = [](struct genie_widget *widget)->int { struct car *car = widget->display->car; return (_fn); }; \
+    widget->value_fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_fn); }; \
     widget->display->widget_count++;       \
   } while (0)
 
@@ -512,9 +526,11 @@ void setup_canbus(struct car *car)
   SerialEx.printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
 }
 
+#include CAR
+
 void setup_car(struct car *car)
 {
-#include CAR
+  car_init(car);
   SerialEx.printf("setup %s... done\n", car->name);
 }
 
@@ -546,8 +562,8 @@ void query_sensor(struct sensor *sensor)
 bool query_module_next_sensor(struct module *module)
 {
   /* module sends updates on its own */
-  if (module->req_id == 0)
-    return false;
+//  if (module->req_id == 0)
+//    return false;
   /*
      something is wrong, module was not queried for too long. unblock and go
   */
@@ -562,7 +578,8 @@ bool query_module_next_sensor(struct module *module)
   /*
      if we poll module too often, return "can't queue"
   */
-  if (module->update_interval &&
+  if (module->req_id && /* no poll */
+      module->update_interval &&
       ((millis() - module->last_update) < module->update_interval))
     return false;
 
@@ -587,9 +604,13 @@ bool query_module_next_sensor(struct module *module)
   /*
      if sensor is passive (sending updates itself) then return "can queue"
   */
-  if (sensor->request_size == 0)
+  if (sensor->request_size == 1) {
+    switch (sensor->request_data[0]) {
+      case 1: sensor->convert_fn(sensor, NULL, 0); break;
+      default: break;
+    }
     return true;
-
+  }
   /*
      if we poll sensor too often, return "can queue"
   */
@@ -637,8 +658,10 @@ long get_sensor_value(struct sensor *sensor, float multiplier)
 {
   if (sensor->value_type == VALUE_INT)
     return sensor->value.v_int * multiplier;
-  else
+  else if (sensor->value_type == VALUE_FLOAT)
     return (int)round(sensor->value.v_float * multiplier);
+  else
+    return (long)sensor->value.v_string;
 }
 
 struct sensor *find_module_sensor_by_id(struct car *car, int module_id, int sensor_id)
@@ -716,14 +739,14 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
   radio->cur_bit = 0;
   pinMode(radio->control_pin, OUTPUT);
   digitalWrite(radio->control_pin, !LOW);
-  radio->timer->attachInterrupt(radio_isr_send_start).start(10000-N);
+  radio->timer->attachInterrupt(radio_isr_send_start).start(10000 - N);
 }
 
 void radio_isr_send_start()
 {
   struct radio *radio = &my_radio;
   digitalWrite(radio->control_pin, !HIGH);
-  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500-N);
+  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500 - N);
 }
 
 void radio_isr_send_bit()
@@ -731,7 +754,7 @@ void radio_isr_send_bit()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !radio->data[radio->cur_bit++]);
-  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000-N);
+  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000 - N);
 }
 
 void radio_isr_send_bit_finish()
@@ -740,10 +763,10 @@ void radio_isr_send_bit_finish()
 
   digitalWrite(radio->control_pin, !HIGH);
   if (radio->cur_bit == 50) {
-//    radio->timer->attachInterrupt(radio_isr_stop).start(1000000);
+    //    radio->timer->attachInterrupt(radio_isr_stop).start(1000000);
     radio_isr_stop();
   } else
-    radio->timer->attachInterrupt(radio_isr_send_bit).start(200-N);
+    radio->timer->attachInterrupt(radio_isr_send_bit).start(200 - N);
 }
 
 void radio_isr_stop()
@@ -799,9 +822,9 @@ void setup_radio(struct radio *radio)
   DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
   DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_toggle_canbus());
 
-// Volvo: 1 - day, 0 - night
-// Kenwood: +12v - dimmer on
-// ULN2003A or NPN transistor reverse value (0 - +12v, 1 - 0v)
+  // Volvo: 1 - day, 0 - night
+  // Kenwood: +12v - dimmer on
+  // ULN2003A or NPN transistor reverse value (0 - +12v, 1 - 0v)
 
   DECLARE_RADIO_COMMAND("dimmer on",  &my_radio, RADIO_EVENT_ILLUMI,  EVENT_HIT (0b0, 0b1), digitalWrite(command->radio->illumi_pin, LOW));
   DECLARE_RADIO_COMMAND("dimmer off", &my_radio, RADIO_EVENT_ILLUMI,  EVENT_MISS(0b1, 0b1), digitalWrite(command->radio->illumi_pin, HIGH));

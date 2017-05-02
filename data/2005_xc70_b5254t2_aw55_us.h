@@ -1,6 +1,44 @@
 /*
  * 2005 XC70 2.5T AW55
  */
+
+const char *get_tcm_gear_string(struct car *car)
+{
+  int gear =
+    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S1_STATUS), 1 << 4) |
+    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S2_STATUS), 1 << 3) |
+    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S3_STATUS), 1 << 2) |
+    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S4_STATUS), 1 << 1) |
+    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S5_STATUS), 1 << 0);
+
+  switch (gear) {
+  case 0b00000:
+    return "  N\n";
+  case 0b00101:
+    return "  R\n";
+  case 0b11100:
+    return "  1\n";
+  case 0b00100:
+    return "  2\n";
+  case 0b00110:
+    return "  3\n";
+  case 0b00010:
+    return "  4\n";
+  case 0b01010:
+    return "  5\n";
+  default:
+    return "  ?\n";
+  }
+}
+
+const char *get_cem_gear_string(int gear)
+{
+  static const char *gear_string[] = {"  D\n", "  P\n", "  R\n", "  N\n"};
+  return gear_string[gear & 0b11];
+}
+
+void car_init(struct car * car)
+{
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_CAR(car, "2005 XC70, engine B5254T2, transmission AW55, US market", CAN_BPS_500K, CAN_BPS_125K);
@@ -29,7 +67,7 @@
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, TCM, "TCM", 0x6e, 0x01200005, CAN_HS);
-  SET_MODULE_PARAM(car, TCM, update_interval, 250);
+  SET_MODULE_PARAM(car, TCM, sensor_default_update_interval, 250);
   DECLARE_SENSOR(car, TCM, TCM_ATF_TEMPERATURE,      "ATF temperature",      ARRAY(0xa5, 0x0c, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7])));
   SET_SENSOR_PARAM(car, TCM, TCM_ATF_TEMPERATURE, update_interval, 1000);
   DECLARE_SENSOR(car, TCM, TCM_S1_STATUS,            "S1 solenoid status",   ARRAY(0xa5, 0x06, 0x01),       VALUE_INT, (sensor->value.v_int = bytes[4]));
@@ -43,44 +81,12 @@
 // Engine torque and torque reduction come together
   DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, (0));
   DECLARE_SENSOR(car, TCM, TCM_ENGINE_TORQUE,        "Engine torque",        ARRAY(0xa5, 0x15, 0x01),       VALUE_INT,
-                 (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7]),
-                  (find_sensor_by_id(sensor->module, TCM_TORQUE_REDUCTION))->value.v_int = bytes[5]));
-
-/*
-S 12345
-P 00000
-R 00101
-N 00000
-1 11100
-2 00100
-3 00110
-4 00010
-5 01010
-L 00000
-int map = get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S1_STATUS), 1 << 4) |
-          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S2_STATUS), 1 << 3) |
-          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S4_STATUS), 1 << 2) |
-          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S3_STATUS), 1 << 1) |
-          get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S5_STATUS), 1 << 0);
-
-switch (map) {
-case 0b00000:
-    return 'N';
-case 0b00101:
-    return 'R';
-case 0b11100:
-    return '1';
-case 0b00100:
-    return '2';
-case 0b00110:
-    return '3';
-case 0b00010:
-    return '4';
-case 0b01010:
-    return '5';
-};
-
-*/
+                 (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7])
+		  /*
+		  ,
+                  (find_sensor_by_id(sensor->module, TCM_TORQUE_REDUCTION))->value.v_int = bytes[5]
+		  */));
+  DECLARE_SENSOR(car, TCM, TCM_CURRENT_GEAR,         "Current gear",         ARRAY(0x01),                   VALUE_STRING, (sensor->value.v_string = (const char *)get_tcm_gear_string(sensor->module->car)));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -88,7 +94,7 @@ case 0b01010:
   // DEM_PUMP_CURRENT comes with DEM_SOLENOID_CURRENT
   DECLARE_SENSOR(car, DEM, DEM_PUMP_CURRENT,         "Pump current",         ARRAY(0xa6, 0x00, 0x05, 0x01), VALUE_INT,
                  (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]),
-                  0 && ((find_sensor_by_id(sensor->module, DEM_SOLENOID_CURRENT))->value.v_int = (int16_t)(256L * bytes[7] + bytes[8]))));
+                  ((find_sensor_by_id(sensor->module, DEM_SOLENOID_CURRENT))->value.v_int = (int16_t)(256L * bytes[7] + bytes[8]))));
   DECLARE_SENSOR(car, DEM, DEM_SOLENOID_CURRENT,     "Solenoid current",     ARRAY(0x00),                   VALUE_INT, (0));
 
   DECLARE_SENSOR(car, DEM, DEM_OIL_PRESSURE,         "Oil pressure",         ARRAY(0xa6, 0x00, 0x03, 0x01), VALUE_INT, (1 /* FIXME */));
@@ -116,3 +122,5 @@ case 0b01010:
   DECLARE_MODULE(car, CEM, "CEM", 0x00, 0x03200408, CAN_LS);
   DECLARE_SENSOR(car, CEM, CEM_GEARBOX_POSITION,     "Gearbox position",    ARRAY(0), VALUE_INT, (sensor->value.v_int = (bytes[6] & 0x30) >> 4));
   SET_SENSOR_PARAM(car, CEM, CEM_GEARBOX_POSITION, ack_cb, cem_gearbox_position_cb);
+  DECLARE_SENSOR(car, CEM, CEM_GEARBOX_POSITION_S,   "Gearbox position",    ARRAY(1), VALUE_STRING, (sensor->value.v_string = get_cem_gear_string(get_sensor_value(find_sensor_by_id(sensor->module, CEM_GEARBOX_POSITION), 1))));
+}

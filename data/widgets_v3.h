@@ -43,4 +43,5 @@ DECLARE_WIDGET("SLU current",  display, 3, GENIE_OBJ_LED_DIGITS, 10, 0, 1200, ge
 DECLARE_WIDGET("Engine torque",  display, 3, GENIE_OBJ_LED_DIGITS, 11, 0, 500, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_ENGINE_TORQUE), 1));
 DECLARE_WIDGET("Torque reduction",  display, 3, GENIE_OBJ_LED_DIGITS, 12, 0, 500, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_TORQUE_REDUCTION), 1));
 
-//DECLARE_WIDGET("Selector",     display, 3, -1, 0, 0, 0, get_sensor_value(find_module_sensor_by_id(car, CEM, CEM_GEARBOX_POSITION), 1));
+DECLARE_WIDGET("Selector",     display, 3, GENIE_OBJ_STRING, 0, 0, 0, get_sensor_value(find_module_sensor_by_id(car, CEM, CEM_GEARBOX_POSITION_S), 1));
+DECLARE_WIDGET("Current gear", display, 3, GENIE_OBJ_STRING, 1, 0, 0, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_CURRENT_GEAR), 1));
