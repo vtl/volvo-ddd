@@ -6,7 +6,7 @@
    (c) 2016 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
-int debug_print = 1;
+int debug_print = 0;
 
 #define WIDGETS "data/widgets_v3.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
@@ -118,6 +118,7 @@ typedef struct sensor {
   int value_type;
   int update_interval;
   long last_update;
+  long last_used;
   uint8_t request_size;
   uint8_t *request_data;
   bool (* match_fn)(struct sensor *, CAN_FRAME *);
@@ -214,6 +215,7 @@ typedef struct car {
     } \
     sensor->convert_fn = [](struct sensor *sensor, unsigned char *bytes, int len) { _fn; }; \
     sensor->update_interval = module->sensor_default_update_interval; \
+    sensor->last_used = millis(); \
     module->sensor_count++;       \
   } while (0)
 
@@ -437,7 +439,7 @@ void can_callback(CAN_FRAME *in)
   }
 
   if (debug_print)
-    SerialEx.printf("got sensor %s\n", sensor->name);
+    SerialEx.printf("got sensor %s:%s\n", sensor->module->name, sensor->name);
 
   if (sensor->convert_fn)
     sensor->convert_fn(sensor, in->data.bytes, in->length);
@@ -618,6 +620,12 @@ bool query_module_next_sensor(struct module *module)
       ((millis() - sensor->last_update) < sensor->update_interval))
     return true;
 
+  /*
+   * if sensor value was not used in last 5 seconds or more
+   */
+  if (millis() > sensor->last_used + 5000)
+    return true;
+
   module->car->last_update = module->last_update = sensor->last_update = millis();
 
   if (module->car->ack_cb)
@@ -656,6 +664,7 @@ void query_all_sensors(struct car *car)
 
 long get_sensor_value(struct sensor *sensor, float multiplier)
 {
+  sensor->last_used = millis();
   if (sensor->value_type == VALUE_INT)
     return sensor->value.v_int * multiplier;
   else if (sensor->value_type == VALUE_FLOAT)
