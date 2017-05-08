@@ -67,6 +67,7 @@ void car_init(struct car * car)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, TCM, "TCM", 0x6e, 0x01200005, CAN_HS);
+  SET_MODULE_PARAM(car, TCM, ack_cb, module_serialize_queries);
   SET_MODULE_PARAM(car, TCM, sensor_default_update_interval, 250);
   DECLARE_SENSOR(car, TCM, TCM_ATF_TEMPERATURE,      "ATF temperature",      ARRAY(0xa5, 0x0c, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7])));
   SET_SENSOR_PARAM(car, TCM, TCM_ATF_TEMPERATURE, update_interval, 1000);
@@ -79,14 +80,12 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, TCM, TCM_SLS_CURRENT,          "SLS solenoid current", ARRAY(0xa5, 0xb3, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[4] + bytes[5])));
   DECLARE_SENSOR(car, TCM, TCM_SLU_CURRENT,          "SLU solenoid current", ARRAY(0xa5, 0xb4, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[4] + bytes[5])));
 // Engine torque and torque reduction come together
-  DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, (0));
   DECLARE_SENSOR(car, TCM, TCM_ENGINE_TORQUE,        "Engine torque",        ARRAY(0xa5, 0x15, 0x01),       VALUE_INT,
-                 (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7])
-		  /*
-		  ,
-                  (find_sensor_by_id(sensor->module, TCM_TORQUE_REDUCTION))->value.v_int = bytes[5]
-		  */));
+                 (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7]),
+                  (find_sensor_by_id(sensor->module, TCM_TORQUE_REDUCTION))->value.v_int = (int16_t)(256L * bytes[4] + bytes[5])
+		  ));
   DECLARE_SENSOR(car, TCM, TCM_CURRENT_GEAR,         "Current gear",         ARRAY(0x01),                   VALUE_STRING, (sensor->value.v_string = (const char *)get_tcm_gear_string(sensor->module->car)));
+  DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, (0));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
