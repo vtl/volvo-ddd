@@ -8,7 +8,7 @@
 
 int debug_print = 0;
 
-#define WIDGETS "data/widgets_v3.h"
+#define WIDGETS "data/widgets_v4.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
 #include <due_can.h>
@@ -35,6 +35,7 @@ StreamEx SerialEx = Serial;
 enum {
   ECM,
   TCM,
+  TCM_LS,
   DEM,
   REM,
   SWM,
@@ -52,7 +53,11 @@ enum {
   ECM_INTAKE_AIR_TEMPERATURE,
   ECM_BOOST_PRESSURE,
   ECM_AC_PRESSURE,
-  ECM_FUEL_PRESSURE
+  ECM_AC_COMP_ACTIVE,
+  ECM_FUEL_PRESSURE,
+  ECM_ENGINE_SPEED,
+  ECM_STFT,
+  ECM_LTFT
 };
 
 enum {
@@ -67,14 +72,21 @@ enum {
   TCM_SLU_CURRENT,
   TCM_ENGINE_TORQUE,
   TCM_TORQUE_REDUCTION,
-  TCM_CURRENT_GEAR
+  TCM_CURRENT_GEAR,
+  TCM_GEAR_RATIO,
+  TCM_GEARBOX_POSITION,
+  TCM_GEARBOX_POSITION_S
 };
 
 enum {
   DEM_PUMP_CURRENT,
   DEM_SOLENOID_CURRENT,
   DEM_OIL_PRESSURE,
-  DEM_OIL_TEMPERATURE
+  DEM_OIL_TEMPERATURE,
+  DEM_FRONT_LEFT_SPEED,
+  DEM_FRONT_RIGHT_SPEED,
+  DEM_REAR_LEFT_SPEED,
+  DEM_REAR_RIGHT_SPEED
 };
 
 enum {
@@ -86,12 +98,11 @@ enum {
 };
 
 enum {
-  CEM_GEARBOX_POSITION,
-  CEM_GEARBOX_POSITION_S
+  CEM_AMBIENT_LIGHT
 };
 
 enum {
-  CCM_AMBIENT_LIGHT
+  CCM_SWITCH_STATUS
 };
 
 /*
@@ -101,6 +112,11 @@ enum {
   VALUE_INT,
   VALUE_FLOAT,
   VALUE_STRING
+};
+
+enum {
+  UNIFRAME,
+  MULTIFRAME
 };
 
 struct sensor;
@@ -121,8 +137,8 @@ typedef struct sensor {
   long last_used;
   uint8_t request_size;
   uint8_t *request_data;
-  bool (* match_fn)(struct sensor *, CAN_FRAME *);
-  void (* convert_fn)(struct sensor *, unsigned char *, int);
+  bool (* match_fn)(struct sensor *, CAN_FRAME *) = NULL;
+  void (* convert_fn)(struct sensor *, unsigned char *, int) = NULL;
   void (* ack_cb)(struct sensor *) = NULL;
   bool acked = true;
 } sensor_t;
@@ -140,8 +156,12 @@ typedef struct module {
   long max_wait = 50;
   void (* ack_cb)(struct module *) = NULL;
   bool acked = true;
+  bool frame_type;
   int last_sensor = 0;
   uint8_t sensor_count = 0;
+  uint8_t rcv_data[256];
+  int rcv_idx = 0;
+  sensor_t *rcv_sensor;
   sensor_t sensor[32];
 } module_t;
 
@@ -156,7 +176,7 @@ typedef struct car {
   bool acked = true;
   void (* ack_cb)(struct car *) = NULL;
   int module_count = 0;
-  module_t module[16];
+  module_t module[32];
 } car_t;
 
 #define DECLARE_CAR(_car, _name, _can_hs_rate, _can_ls_rate) \
@@ -172,7 +192,7 @@ typedef struct car {
     car->_param = _value; \
   } while (0)
 
-#define DECLARE_MODULE(_car, _id, _name, _req_id, _can_id, _canbus) \
+#define DECLARE_MODULE(_car, _id, _name, _req_id, _can_id, _canbus, _frame_type) \
   do { \
     struct module *module = &_car->module[_car->module_count]; \
     module->id = _id; \
@@ -181,6 +201,7 @@ typedef struct car {
     module->req_id = _req_id; \
     module->can_id = _can_id; \
     module->canbus = &_canbus; \
+    module->frame_type = _frame_type; \
     module->sensor_count = 0; \
     _car->module_count++; \
   } while (0)
@@ -205,7 +226,7 @@ typedef struct car {
     sensor->request_data = req_##_module_id_##_id; \
     sensor->request_size = sizeof(req_##_module_id_##_id); \
     sensor->name = _name;     \
-    sensor->module = &_car->module[_module_id]; \
+    sensor->module = module; \
     sensor->value_type = _val_type; \
     switch (sensor->request_data[0]) { \
       case 0xa6: sensor->match_fn = match_a6_fn; break; \
@@ -238,7 +259,7 @@ typedef struct genie_widget {
   int screen;
   int object_type;
   int object_index;
-  long last_value;
+  long last_value = -1;
   long min_value;
   long max_value;
   long (*value_fn)(struct genie_widget *);
@@ -247,9 +268,10 @@ typedef struct genie_widget {
 typedef struct genie_display {
   Genie genie;
   int current_screen = 0;
+  int max_screen = 0;
   struct car *car;
-  uint8_t widget_count = 0;
-  genie_widget_t widget[32];
+  int widget_count = 0;
+  genie_widget_t widget[128];
 } genie_display_t;
 
 #define GENIE_OBJ_STRING (-1)
@@ -299,6 +321,7 @@ void widget_update(struct genie_widget *widget)
     widget->max_value = _max; \
     widget->value_fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_fn); }; \
     widget->display->widget_count++;       \
+    widget->display->max_screen = max(widget->display->max_screen, _screen); \
   } while (0)
 
 void reset_genie(Genie *genie)
@@ -327,6 +350,7 @@ void setup_genie_display(struct genie_display *display, struct car *car)
 
 void refresh_display(struct genie_display *display, int screen)
 {
+  display->genie.DoEvents();
   if (screen != display->current_screen) {
     SerialEx.printf("changing screen to %d\n", screen);
     display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
@@ -341,6 +365,10 @@ void refresh_display(struct genie_display *display, int screen)
 car_t my_car;
 genie_display my_display;
 int current_screen = 0;
+
+void genie_next_screen() {
+  current_screen = (current_screen + 1) % (my_display.max_screen + 1);
+}
 
 void print_frame(const char *s, CAN_FRAME *in)
 {
@@ -393,8 +421,21 @@ struct module *find_module_by_id(struct car *car, int module_id)
   return NULL;
 }
 
+struct module *find_module_by_can_id(struct car *car, unsigned long can_id)
+{
+  for (int m = 0; m < car->module_count; m++)
+    if (car->module[m].can_id == can_id)
+      return &car->module[m];
+  if (debug_print)
+    SerialEx.printf("can't find module by can_id %d\n", can_id);
+
+  return NULL;
+}
+
 struct sensor *find_sensor_by_id(struct module *module, int sensor_id)
 {
+  if (!module)
+    return NULL;
   for (int s = 0; s < module->sensor_count; s++)
     if (module->sensor[s].id == sensor_id)
       return &module->sensor[s];
@@ -438,6 +479,7 @@ void can_callback(CAN_FRAME *in)
     return;
   }
 
+  print_frame("CAN frame", in);
   if (debug_print)
     SerialEx.printf("got sensor %s:%s\n", sensor->module->name, sensor->name);
 
@@ -451,40 +493,60 @@ void can_callback(CAN_FRAME *in)
     sensor->module->car->ack_cb(sensor->module->car);
 }
 
-unsigned char can_data[256];
-
-void can_callback1(CAN_FRAME *in)
+void can_callback_multiframe(char *msg, CAN_FRAME *in)
 {
-  static sensor_t *sensor = NULL;
-  static int idx = 0;
+  int offset;
   int len;
+  struct sensor *sensor = NULL;
+  struct module *module = NULL;
 
-  if (in->data.bytes[0] & 0x80) {
-    sensor = guess_sensor_by_reply(&my_car, in);
-    if (!sensor) {
-      print_frame("unknown CAN frame", in);
-      return;
-    }
-    idx = 0;
+  sensor = guess_sensor_by_reply(&my_car, in);
+  if (!sensor) {
+//    print_frame("unknown CAN frame", in);
+    return;
   }
+
+  if (sensor->module->frame_type == UNIFRAME) {
+    can_callback(in);
+    return;
+  }
+
+  print_frame(msg, in);
+
+  if (in->data.bytes[0] & 0x80) { // frame start
+    module = sensor->module;
+    module->rcv_sensor = sensor;
+    module->rcv_idx = 0;
+    offset = 0;
+    len = in->length; // copy everything
+  } else {
+      offset = 1; // skip flags and len
+      len = in->data.bytes[0] & 0x0f - 8;
+  }
+
+  module = find_module_by_can_id(&my_car, in->id);
+  if (!module) {
+    return;
+  }
+
+  sensor = module->rcv_sensor;
 
   if (!sensor)
     return;
 
-  len = in->length;
-  if (idx + len >= sizeof(can_data)) {
+  if (module->rcv_idx + len >= 256) {
     if (debug_print) {
-      SerialEx.printf("dropped multiframe with len %d > %d\n", idx + len, sizeof(can_data));
-      sensor = NULL;
-      return;
+      SerialEx.printf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, 256);
+      goto out;
     }
   }
-  print_frame("in", in);
-  SerialEx.printf("idx %d, len %d\n", idx, len);
-  memcpy(can_data + idx, in->data.bytes, len);
-  idx += len;
 
-  if ((in->data.bytes[0] & 0x40) == 0) {
+  if (debug_print)
+    SerialEx.printf("idx %d, len %d\n", module->rcv_idx, len);
+  memcpy(module->rcv_data + module->rcv_idx, in->data.bytes + offset, len - offset); // FIXME how many bytes to skip?
+  module->rcv_idx += len - offset;
+
+  if ((in->data.bytes[0] & 0x40) == 0) { // frame end
     return;
   }
 
@@ -492,18 +554,31 @@ void can_callback1(CAN_FRAME *in)
     SerialEx.printf("got sensor %s\n", sensor->name);
 
   if (debug_print)
-    dump_array(can_data, idx);
+    dump_array(module->rcv_data, module->rcv_idx);
 
   if (sensor->convert_fn)
-    sensor->convert_fn(sensor, can_data, idx);
+    sensor->convert_fn(sensor, module->rcv_data, module->rcv_idx);
   if (sensor->ack_cb)
     sensor->ack_cb(sensor);
   if (sensor->module->ack_cb)
     sensor->module->ack_cb(sensor->module);
   if (sensor->module->car->ack_cb)
     sensor->module->car->ack_cb(sensor->module->car);
-  sensor = NULL;
-  idx = 0;
+out:
+  module->rcv_sensor = NULL;
+  module->rcv_idx = 0;
+}
+
+void can_callback0(CAN_FRAME *in)
+{
+  unsigned char can_data[256];
+  can_callback_multiframe("CAN HS", in);
+}
+
+void can_callback1(CAN_FRAME *in)
+{
+  unsigned char can_data[256];
+  can_callback_multiframe("CAN LS", in);
 }
 
 void setup_canbus(struct car *car)
@@ -521,8 +596,8 @@ void setup_canbus(struct car *car)
     module->canbus->setRXFilter(module->can_id, 0x1fffff, true);
   }
 
-  Can0.setGeneralCallback(can_callback);
-  Can1.setGeneralCallback(can_callback);
+  Can0.setGeneralCallback(can_callback0);
+  Can1.setGeneralCallback(can_callback1);
 
   SerialEx.printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
   SerialEx.printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
@@ -563,18 +638,17 @@ void query_sensor(struct sensor *sensor)
 */
 bool query_module_next_sensor(struct module *module)
 {
-  /* module sends updates on its own */
-//  if (module->req_id == 0)
-//    return false;
   /*
      something is wrong, module was not queried for too long. unblock and go
   */
   if ((millis() - module->last_update) > module->max_wait)
     module->acked = true;
+  if (!module->car->acked)
+    return false;
   /*
      if module is serialized and previous query is in flight, return "can't queue"
   */
-  if (!module->acked)
+  if (module->ack_cb && !module->acked)
     return false;
 
   /*
@@ -588,7 +662,7 @@ bool query_module_next_sensor(struct module *module)
   /*
      all sensor queried
   */
-  if (module->last_sensor >= module->sensor_count) {
+  if (module->last_sensor == module->sensor_count) {
     module->last_sensor = 0;
     return false;
   }
@@ -658,12 +732,15 @@ void query_all_sensors(struct car *car)
   if (m == car->module_count)
     m = 0;
 
-  if (!query_module_next_sensor(&car->module[m]))
+  if (!query_module_next_sensor(&car->module[m])) /* one sensor per module per loop */
     m++;
+  get_sensor_value(find_module_sensor_by_id(car, CCM, CCM_SWITCH_STATUS), 1); // FIXME no widgets need it, so keep it alive
 }
 
 long get_sensor_value(struct sensor *sensor, float multiplier)
 {
+  if (!sensor)
+    return 0;
   sensor->last_used = millis();
   if (sensor->value_type == VALUE_INT)
     return sensor->value.v_int * multiplier;
@@ -671,6 +748,16 @@ long get_sensor_value(struct sensor *sensor, float multiplier)
     return (int)round(sensor->value.v_float * multiplier);
   else
     return (long)sensor->value.v_string;
+}
+
+long get_sensor_abs_value(struct sensor *sensor, float multiplier)
+{
+  return abs(get_sensor_value(sensor, multiplier));
+}
+
+bool get_sensor_value_sign(struct sensor *sensor)
+{
+  return (get_sensor_value(sensor, 1) >= 0);
 }
 
 struct sensor *find_module_sensor_by_id(struct car *car, int module_id, int sensor_id)
@@ -855,7 +942,7 @@ void radio_arm_next_screen()
 
   screen_arm_busy = true;
   screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
-  current_screen = ++current_screen % 5;
+  genie_next_screen();
 }
 
 void radio_unarm_delay()
@@ -873,6 +960,7 @@ void radio_toggle_canbus()
   screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
 
   my_car.can_poll = !my_car.can_poll;
+//  genie.WriteContrast(my_car.can_poll); // turn off display if can't poll
 }
 
 void radio_event(struct radio *radio, int function, int param)
@@ -892,14 +980,36 @@ void swm_audio_controls_cb(struct sensor *sensor)
   radio_event(&my_radio, RADIO_EVENT_SWC, get_sensor_value(sensor, 1));
 }
 
-void ccm_ambient_light_cb(struct sensor *sensor)
+void cem_ambient_light_cb(struct sensor *sensor)
 {
   radio_event(&my_radio, RADIO_EVENT_ILLUMI, get_sensor_value(sensor, 1));
 }
 
-void cem_gearbox_position_cb(struct sensor *sensor)
+void tcm_gearbox_position_cb(struct sensor *sensor)
 {
   radio_event(&my_radio, RADIO_EVENT_GEARBOX, get_sensor_value(sensor, 1));
+}
+
+void ccm_switch_status_cb(struct sensor *sensor)
+{
+  static bool last_status = 0, once = false;
+  static long last_pressed_time = 0;
+  bool status = get_sensor_value(sensor, 1);
+
+  if (status && !last_status) {         /* press */
+    last_pressed_time = millis();
+    genie_next_screen();
+  } else if (!status && last_status) {  /* release */
+    once = false;
+  } else if (status && last_status) {   /* press and hold */
+    if (!once && (millis() - last_pressed_time > 3000)) {
+      once = true;
+      my_car.can_poll = !my_car.can_poll;
+//      genie.WriteContrast(my_car.can_poll); // turn off display if can't poll
+    }
+  }
+  last_status = status;
+  sensor->acked = true;
 }
 
 void setup()

@@ -77,4 +77,4 @@ DECLARE_WIDGET("Pump current",  display, 4, GENIE_OBJ_LED_DIGITS, 21, 0, 65535, 
 DECLARE_WIDGET("Oil temp sign", display, 4, GENIE_OBJ_USER_LED, 12, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, DEM, DEM_OIL_TEMPERATURE)));
 
 // TXT
-DECLARE_WIDGET("Text",          display, 5, GENIE_OBJ_STRING, 2, 0, 0, (long)"hello world!");
+//DECLARE_WIDGET("Text",          display, 5, GENIE_OBJ_STRING, 2, 0, 0, (long)"hello world!");
