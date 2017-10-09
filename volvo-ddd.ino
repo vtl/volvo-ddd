@@ -662,12 +662,18 @@ bool query_module_next_sensor(struct module *module)
   /*
      all sensor queried
   */
-  if (module->last_sensor == module->sensor_count) {
+  if (module->last_sensor >= module->sensor_count) {
     module->last_sensor = 0;
     return false;
   }
 
   sensor_t *sensor = &module->sensor[module->last_sensor];
+
+  /*
+     something is wrong, sensor was not queried for too long. unblock and go
+  */
+  if ((millis() - sensor->last_update) > 2 * sensor->update_interval)
+    sensor->acked = true;
 
   /*
      if sensor is serialized and previous query is in flight, return "can't queue"
@@ -729,7 +735,7 @@ void query_all_sensors(struct car *car)
   if (!car->acked)
     return;
 
-  if (m == car->module_count)
+  if (m >= car->module_count)
     m = 0;
 
   if (!query_module_next_sensor(&car->module[m])) /* one sensor per module per loop */
