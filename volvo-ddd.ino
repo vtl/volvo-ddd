@@ -16,6 +16,9 @@ int debug_print = 0;
 #include <PrintEx.h>
 #include <DueTimer.h>
 
+#define __ASSERT_USE_STDERR
+#include <assert.h>
+
 float temp_c_to_f(float c)
 {
   return c * 1.8 + 32;
@@ -143,6 +146,8 @@ typedef struct sensor {
   bool acked = true;
 } sensor_t;
 
+#define MAX_SENSORS_PER_MODULE 32
+
 typedef struct module {
   uint8_t id;
   const char *name;
@@ -162,8 +167,10 @@ typedef struct module {
   uint8_t rcv_data[256];
   int rcv_idx = 0;
   sensor_t *rcv_sensor;
-  sensor_t sensor[32];
+  sensor_t sensor[MAX_SENSORS_PER_MODULE];
 } module_t;
+
+#define MAX_MODULES_PER_CAR 32
 
 typedef struct car {
   const char *name;
@@ -176,7 +183,7 @@ typedef struct car {
   bool acked = true;
   void (* ack_cb)(struct car *) = NULL;
   int module_count = 0;
-  module_t module[32];
+  module_t module[MAX_MODULES_PER_CAR];
 } car_t;
 
 #define DECLARE_CAR(_car, _name, _can_hs_rate, _can_ls_rate) \
@@ -195,7 +202,8 @@ typedef struct car {
 #define DECLARE_MODULE(_car, _id, _name, _req_id, _can_id, _canbus, _frame_type) \
   do { \
     struct module *module = &_car->module[_car->module_count]; \
-    module->id = _id; \
+    assert(_car->module_count < MAX_MODULES_PER_CAR); \
+    module->id = _id;	\
     module->car = _car; \
     module->name = _name; \
     module->req_id = _req_id; \
@@ -221,6 +229,7 @@ typedef struct car {
     if (!module) \
       break; \
     struct sensor *sensor = &module->sensor[module->sensor_count]; \
+    assert(module->sensor_count < MAX_SENSORS_PER_MODULE); \
     sensor->id = _id; \
     static uint8_t req_##_module_id_##_id[] = _req;     \
     sensor->request_data = req_##_module_id_##_id; \
@@ -265,13 +274,16 @@ typedef struct genie_widget {
   long (*value_fn)(struct genie_widget *);
 } genie_widget_t;
 
+#define MAX_WIDGETS 128
+
 typedef struct genie_display {
   Genie genie;
+  bool enabled = true;
   int current_screen = 0;
   int max_screen = 0;
   struct car *car;
   int widget_count = 0;
-  genie_widget_t widget[128];
+  genie_widget_t widget[MAX_WIDGETS];
 } genie_display_t;
 
 #define GENIE_OBJ_STRING (-1)
@@ -312,6 +324,7 @@ void widget_update(struct genie_widget *widget)
 #define DECLARE_WIDGET(_name, _display, _screen, _object_type, _object_index, _min, _max, _fn) \
   do { \
     struct genie_widget *widget = &_display->widget[_display->widget_count]; \
+    assert(_display->widget_count < MAX_WIDGETS); \
     widget->name = _name; \
     widget->display = _display; \
     widget->screen = _screen; \
@@ -792,6 +805,8 @@ struct radio_command {
   void (*fn)(struct radio_command *);
 };
 
+#define MAX_RADIO_COMMANDS 16
+
 typedef struct radio {
   const char *name;
   void setup(struct car *car);
@@ -805,7 +820,7 @@ typedef struct radio {
   int cur_bit;
   uint8_t data[49];
   int commands;
-  struct radio_command command[16];
+  struct radio_command command[MAX_RADIO_COMMANDS];
 } radio_t;
 
 struct radio my_radio;
@@ -817,6 +832,7 @@ struct radio my_radio;
   do { \
     struct radio *radio = _radio; \
     struct radio_command *command = &radio->command[radio->commands]; \
+    assert(radio->commands < MAX_RADIO_COMMANDS); \
     command->name = _name; \
     command->function = _function; \
     command->match_fn = [](int param)->bool { return _match_fn; }; \
