@@ -288,8 +288,11 @@ typedef struct genie_display {
 
 #define GENIE_OBJ_STRING (-1)
 
-void widget_update(struct genie_widget *widget)
+void widget_update(struct genie_widget *widget, bool force)
 {
+  if (!widget->display->enabled)
+    return;
+
   long new_value = widget->value_fn(widget);
 
   if (widget->object_type != GENIE_OBJ_STRING) {
@@ -303,7 +306,7 @@ void widget_update(struct genie_widget *widget)
       new_value = widget->max_value;
     }
   }
-  if (new_value != widget->last_value) {
+  if (force || new_value != widget->last_value) {
     if (debug_print)
       SerialEx.printf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
     long ms = millis();
@@ -363,15 +366,20 @@ void setup_genie_display(struct genie_display *display, struct car *car)
 
 void refresh_display(struct genie_display *display, int screen)
 {
+  bool force = false;
+
   display->genie.DoEvents();
+  display->genie.WriteContrast(display->enabled);
+
   if (screen != display->current_screen) {
     SerialEx.printf("changing screen to %d\n", screen);
     display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
     display->current_screen = screen;
+    force = true;
   }
   for (int i = 0; i < display->widget_count; i++) {
     if (display->widget[i].screen == display->current_screen)
-      widget_update(&display->widget[i]);
+      widget_update(&display->widget[i], force);
   }
 }
 
@@ -982,7 +990,7 @@ void radio_toggle_canbus()
   screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
 
   my_car.can_poll = !my_car.can_poll;
-//  genie.WriteContrast(my_car.can_poll); // turn off display if can't poll
+  my_display.enabled = my_car.can_poll; // turn off display if can't poll
 }
 
 void radio_event(struct radio *radio, int function, int param)
@@ -1020,14 +1028,15 @@ void ccm_switch_status_cb(struct sensor *sensor)
 
   if (status && !last_status) {         /* press */
     last_pressed_time = millis();
-    genie_next_screen();
   } else if (!status && last_status) {  /* release */
+    if (!once)
+      genie_next_screen();
     once = false;
   } else if (status && last_status) {   /* press and hold */
     if (!once && (millis() - last_pressed_time > 3000)) {
       once = true;
       my_car.can_poll = !my_car.can_poll;
-//      genie.WriteContrast(my_car.can_poll); // turn off display if can't poll
+      my_display.enabled = my_car.can_poll;
     }
   }
   last_status = status;

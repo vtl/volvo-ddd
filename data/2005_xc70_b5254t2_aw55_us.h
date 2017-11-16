@@ -132,7 +132,7 @@ void car_init(struct car * car)
   DECLARE_MODULE(car, CCM, "CCM", 0x29, 0x00801001, CAN_LS, UNIFRAME);
   DECLARE_SENSOR(car, CCM, CCM_SWITCH_STATUS,        "Switch status",       ARRAY(0xa6, 0x00, 0x77, 0x01), VALUE_INT, (sensor->value.v_int = !!(bytes[5] >> 4)));
   SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, ack_cb, ccm_switch_status_cb);
-  SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, update_interval, 200);
+  SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, update_interval, 100);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
