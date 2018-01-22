@@ -33,7 +33,7 @@ const char *get_tcm_gear_string(struct car *car)
 
 const char *get_gearbox_level_position_string(int gear)
 {
-  static const char *gear_string[] = {"  D\n", "  P\n", "  R\n", "  N\n"};
+  static const char *gear_string[] = {"  P\n", "  R\n", "  N\n", "  D\n"};
   return gear_string[gear & 0b11];
 }
 
@@ -62,8 +62,18 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, ECM, ECM_STFT,                 "STFT",                 ARRAY(0xa6, 0x10, 0x51, 0x01), VALUE_FLOAT, (sensor->value.v_float = ((256 * bytes[5] + bytes[6]) * 2.0) / 65535));
   SET_SENSOR_PARAM(car, ECM, ECM_STFT, update_interval, 500);
   DECLARE_SENSOR(car, ECM, ECM_LTFT,                 "LTFT",                 ARRAY(0xa6, 0x11, 0x4c, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256 * bytes[5] + bytes[6]) * 0.046875));
+  DECLARE_SENSOR(car, ECM, ECM_FAN_DUTY,             "Engine fan duty",      ARRAY(0xa6, 0x12, 0x48, 0x01), VALUE_INT, (sensor->value.v_int = bytes[5] * 100 / 255));
+  DECLARE_SENSOR(car, ECM, ECM_MISFIRE_COUNTER,      "Misfire counter",      ARRAY(0xa6, 0x10, 0xad, 0x01), VALUE_INT, (sensor->value.v_int = 256L * bytes[5] + bytes[6]));
+
+  SET_MODULE_PARAM(car, ECM, sensor_default_update_interval, 250);
   DECLARE_SENSOR(car, ECM, ECM_FUEL_PRESSURE,        "Fuel pressure",        ARRAY(0xa6, 0x15, 0x7d, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0724792480 - 69));
-  SET_SENSOR_PARAM(car, ECM, ECM_FUEL_PRESSURE, update_interval, 250);
+  DECLARE_SENSOR(car, ECM, ECM_FUEL_PUMP_DUTY,       "Fuel pump duty",       ARRAY(0xa6, 0x15, 0x83, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0015287890625));
+  DECLARE_SENSOR(car, ECM, ECM_TCV_DUTY,             "TCV duty",             ARRAY(0xa6, 0x10, 0x2d, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 191.25 / 255));
+  DECLARE_SENSOR(car, ECM, ECM_THROTTLE_ANGLE,       "Throttle angle",       ARRAY(0xa6, 0x10, 0x4e, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 100 / 255));
+  DECLARE_SENSOR(car, ECM, ECM_MAF,                  "Mass air flow",        ARRAY(0xa6, 0x10, 0x9a, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]) * 0.1));
+  DECLARE_SENSOR(car, ECM, ECM_VVT_IN_ANGLE,         "VVT inlet angle",      ARRAY(0xa6, 0x13, 0x63, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0390625));
+  DECLARE_SENSOR(car, ECM, ECM_VVT_EX_ANGLE,         "VVT exhaust angle",    ARRAY(0xa6, 0x13, 0x62, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0390625));
+  DECLARE_SENSOR(car, ECM, ECM_BTDC,                 "BTDC",                 ARRAY(0xa6, 0x10, 0x2c, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 191.25 / 255));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -80,6 +90,10 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, TCM, TCM_SLT_CURRENT,          "SLT solenoid current", ARRAY(0xa5, 0xb2, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[4] + bytes[5])));
   DECLARE_SENSOR(car, TCM, TCM_SLS_CURRENT,          "SLS solenoid current", ARRAY(0xa5, 0xb3, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[4] + bytes[5])));
   DECLARE_SENSOR(car, TCM, TCM_SLU_CURRENT,          "SLU solenoid current", ARRAY(0xa5, 0xb4, 0x01),       VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[4] + bytes[5])));
+
+  DECLARE_SENSOR(car, TCM, TCM_GEARBOX_POSITION,     "Gearbox position",    ARRAY(0xa5, 0x01, 0x01), VALUE_INT, (sensor->value.v_int = bytes[5] & 0x3));
+  SET_SENSOR_PARAM(car, TCM, TCM_GEARBOX_POSITION, ack_cb, tcm_gearbox_position_cb);
+
 // Engine torque and torque reduction come together
   DECLARE_SENSOR(car, TCM, TCM_ENGINE_TORQUE,        "Engine torque",        ARRAY(0xa5, 0x15, 0x01),       VALUE_INT,
                  (sensor->value.v_int = (int16_t)(256L * bytes[6] + bytes[7]),
@@ -87,6 +101,7 @@ void car_init(struct car * car)
                  ));
   DECLARE_SENSOR(car, TCM, TCM_GEAR_RATIO,           "Gear ratio",           ARRAY(0xa5, 0x93, 0x01),       VALUE_FLOAT, (sensor->value.v_float = ((256L * bytes[4] + bytes[5]) == 0xffff ? 0 : (256L * bytes[4] + bytes[5])) * 0.001));
   DECLARE_SENSOR(car, TCM, TCM_CURRENT_GEAR,         "Current gear",         ARRAY(0x01),                   VALUE_STRING, (sensor->value.v_string = (const char *)get_tcm_gear_string(sensor->module->car)));
+  DECLARE_SENSOR(car, TCM, TCM_GEARBOX_POSITION_S,   "Gearbox position",     ARRAY(0x01), VALUE_STRING, (sensor->value.v_string = get_gearbox_level_position_string(get_sensor_value(find_sensor_by_id(sensor->module, TCM_GEARBOX_POSITION), 1))));
   DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, (0));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -99,7 +114,7 @@ void car_init(struct car * car)
                  (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]),
                   ((find_sensor_by_id(sensor->module, DEM_SOLENOID_CURRENT))->value.v_int = (int16_t)(256L * bytes[7] + bytes[8]))));
   DECLARE_SENSOR(car, DEM, DEM_OIL_PRESSURE,         "Oil pressure",         ARRAY(0xa6, 0x00, 0x03, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 0.0164));
-  DECLARE_SENSOR(car, DEM, DEM_OIL_TEMPERATURE,      "Oil temperature",      ARRAY(0xa6, 0x00, 0x02, 0x01), VALUE_INT, (sensor->value.v_int = (char)bytes[5]));
+  DECLARE_SENSOR(car, DEM, DEM_OIL_TEMPERATURE,      "Oil temperature",      ARRAY(0xa6, 0x00, 0x02, 0x01), VALUE_INT, (sensor->value.v_int = (signed char)bytes[5]));
   DECLARE_SENSOR(car, DEM, DEM_FRONT_LEFT_SPEED,     "FL velocity",          ARRAY(0xa6, 0x00, 0x06, 0x01), VALUE_FLOAT,
                  (sensor->value.v_float                                                    = (uint16_t)(256 * bytes[ 6] + bytes[ 7]) * 0.0156,
                  (find_sensor_by_id(sensor->module, DEM_FRONT_RIGHT_SPEED))->value.v_float = (uint16_t)(256 * bytes[ 8] + bytes[ 9]) * 0.0156,
@@ -133,11 +148,9 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, CCM, CCM_SWITCH_STATUS,        "Switch status",       ARRAY(0xa6, 0x00, 0x77, 0x01), VALUE_INT, (sensor->value.v_int = !!(bytes[5] >> 4)));
   SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, ack_cb, ccm_switch_status_cb);
   SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, update_interval, 100);
+  DECLARE_SENSOR(car, CCM, CCM_EVAP_TEMP,           "Evaporator temperature",ARRAY(0xa6, 0x00, 0x01, 0x01), VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625 - 100));
+  DECLARE_SENSOR(car, CCM, CCM_CABIN_TEMP,          "Cabin temperature",    ARRAY(0xa6, 0x00, 0xa1, 0x01),  VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625 - 100));
+  DECLARE_SENSOR(car, CCM, CCM_BLOWER_DUTY,         "Cabin fan speed",      ARRAY(0xa6, 0x00, 0x30, 0x01),  VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  DECLARE_MODULE(car, TCM_LS, "TCM LS", 0x00, 0x03200408, CAN_LS, UNIFRAME);
-  DECLARE_SENSOR(car, TCM_LS, TCM_GEARBOX_POSITION,     "Gearbox position",    ARRAY(0), VALUE_INT, (sensor->value.v_int = (bytes[6] & 0x30) >> 4));
-  SET_SENSOR_PARAM(car, TCM_LS, TCM_GEARBOX_POSITION, ack_cb, tcm_gearbox_position_cb);
-  DECLARE_SENSOR(car, TCM_LS, TCM_GEARBOX_POSITION_S,   "Gearbox position",    ARRAY(1), VALUE_STRING, (sensor->value.v_string = get_gearbox_level_position_string(get_sensor_value(find_sensor_by_id(sensor->module, TCM_GEARBOX_POSITION), 1))));
 }

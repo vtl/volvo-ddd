@@ -8,7 +8,7 @@
 
 int debug_print = 0;
 
-#define WIDGETS "data/widgets_v4.h"
+#define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
 #include <due_can.h>
@@ -27,7 +27,7 @@ float temp_c_to_f(float c)
 #define LCD_RESETLINE 2
 
 Genie genie;
-StreamEx SerialEx = Serial;
+StreamEx SerialEx = SerialUSB;
 
 #define CAN_HS Can0
 #define CAN_LS Can1
@@ -38,7 +38,6 @@ StreamEx SerialEx = Serial;
 enum {
   ECM,
   TCM,
-  TCM_LS,
   DEM,
   REM,
   SWM,
@@ -60,7 +59,16 @@ enum {
   ECM_FUEL_PRESSURE,
   ECM_ENGINE_SPEED,
   ECM_STFT,
-  ECM_LTFT
+  ECM_LTFT,
+  ECM_FUEL_PUMP_DUTY,
+  ECM_TCV_DUTY,
+  ECM_THROTTLE_ANGLE,
+  ECM_MAF,
+  ECM_VVT_IN_ANGLE,
+  ECM_VVT_EX_ANGLE,
+  ECM_BTDC,
+  ECM_FAN_DUTY,
+  ECM_MISFIRE_COUNTER
 };
 
 enum {
@@ -105,7 +113,10 @@ enum {
 };
 
 enum {
-  CCM_SWITCH_STATUS
+  CCM_SWITCH_STATUS,
+  CCM_EVAP_TEMP,
+  CCM_CABIN_TEMP,
+  CCM_BLOWER_DUTY
 };
 
 /*
@@ -371,7 +382,7 @@ void refresh_display(struct genie_display *display, int screen)
   display->genie.DoEvents();
   display->genie.WriteContrast(display->enabled);
 
-  if (screen != display->current_screen) {
+  if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
     SerialEx.printf("changing screen to %d\n", screen);
     display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
     display->current_screen = screen;
@@ -593,13 +604,13 @@ out:
 void can_callback0(CAN_FRAME *in)
 {
   unsigned char can_data[256];
-  can_callback_multiframe("CAN HS", in);
+  can_callback_multiframe((char *)"CAN HS", in);
 }
 
 void can_callback1(CAN_FRAME *in)
 {
   unsigned char can_data[256];
-  can_callback_multiframe("CAN LS", in);
+  can_callback_multiframe((char *)"CAN LS", in);
 }
 
 void setup_canbus(struct car *car)
@@ -833,8 +844,8 @@ typedef struct radio {
 
 struct radio my_radio;
 
-#define EVENT_HIT(x, mask) ((param & (mask)) == (x))
-#define EVENT_MISS(x, mask) (!EVENT_HIT((x), (mask)))
+#define EVENT_HIT(x, mask)  ((param & (mask)) == (x))
+#define EVENT_MISS(x, mask) ((param & (mask)) != (x))
 
 #define DECLARE_RADIO_COMMAND(_name, _radio, _function, _match_fn, _fn) \
   do { \
@@ -952,14 +963,14 @@ void setup_radio(struct radio *radio)
   // Kenwood: +12v - dimmer on
   // ULN2003A or NPN transistor reverse value (0 - +12v, 1 - 0v)
 
-  DECLARE_RADIO_COMMAND("dimmer on",  &my_radio, RADIO_EVENT_ILLUMI,  EVENT_HIT (0b0, 0b1), digitalWrite(command->radio->illumi_pin, LOW));
-  DECLARE_RADIO_COMMAND("dimmer off", &my_radio, RADIO_EVENT_ILLUMI,  EVENT_MISS(0b1, 0b1), digitalWrite(command->radio->illumi_pin, HIGH));
+  DECLARE_RADIO_COMMAND("dimmer on",  &my_radio, RADIO_EVENT_ILLUMI,  EVENT_HIT (0b1, 0b1), digitalWrite(command->radio->illumi_pin, LOW));
+  DECLARE_RADIO_COMMAND("dimmer off", &my_radio, RADIO_EVENT_ILLUMI,  EVENT_HIT (0b0, 0b1), digitalWrite(command->radio->illumi_pin, HIGH));
 
-  DECLARE_RADIO_COMMAND("P gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b01, 0b11), digitalWrite(command->radio->park_pin, HIGH));
-  DECLARE_RADIO_COMMAND("P gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b01, 0b11), digitalWrite(command->radio->park_pin, LOW));
+  DECLARE_RADIO_COMMAND("P gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b00, 0b11), digitalWrite(command->radio->park_pin, HIGH));
+  DECLARE_RADIO_COMMAND("P gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b00, 0b11), digitalWrite(command->radio->park_pin, LOW));
 
-  DECLARE_RADIO_COMMAND("R gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b10, 0b11), digitalWrite(command->radio->camera_pin, LOW));
-  DECLARE_RADIO_COMMAND("R gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b10, 0b11), digitalWrite(command->radio->camera_pin, HIGH));
+  DECLARE_RADIO_COMMAND("R gear on",  &my_radio, RADIO_EVENT_GEARBOX, EVENT_HIT (0b01, 0b11), digitalWrite(command->radio->camera_pin, LOW));
+  DECLARE_RADIO_COMMAND("R gear off", &my_radio, RADIO_EVENT_GEARBOX, EVENT_MISS(0b01, 0b11), digitalWrite(command->radio->camera_pin, HIGH));
 }
 
 static int screen_arm_busy = false;
