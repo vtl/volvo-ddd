@@ -66,11 +66,11 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, ECM, ECM_MISFIRE_COUNTER,      "Misfire counter",      ARRAY(0xa6, 0x10, 0xad, 0x01), VALUE_INT, (sensor->value.v_int = 256L * bytes[5] + bytes[6]));
 
   SET_MODULE_PARAM(car, ECM, sensor_default_update_interval, 250);
-  DECLARE_SENSOR(car, ECM, ECM_FUEL_PRESSURE,        "Fuel pressure",        ARRAY(0xa6, 0x15, 0x7d, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0724792480 - 69));
-  DECLARE_SENSOR(car, ECM, ECM_FUEL_PUMP_DUTY,       "Fuel pump duty",       ARRAY(0xa6, 0x15, 0x83, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0015287890625));
+  DECLARE_SENSOR(car, ECM, ECM_FUEL_PRESSURE,        "Fuel pressure",        ARRAY(0xa6, 0x15, 0x7d, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0724792480 - 69));
+  DECLARE_SENSOR(car, ECM, ECM_FUEL_PUMP_DUTY,       "Fuel pump duty",       ARRAY(0xa6, 0x15, 0x83, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0015287890625));
   DECLARE_SENSOR(car, ECM, ECM_TCV_DUTY,             "TCV duty",             ARRAY(0xa6, 0x10, 0x2d, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 191.25 / 255));
-  DECLARE_SENSOR(car, ECM, ECM_THROTTLE_ANGLE,       "Throttle angle",       ARRAY(0xa6, 0x10, 0x4e, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 100 / 255));
-  DECLARE_SENSOR(car, ECM, ECM_MAF,                  "Mass air flow",        ARRAY(0xa6, 0x10, 0x9a, 0x01), VALUE_INT, (sensor->value.v_int = (int16_t)(256L * bytes[5] + bytes[6]) * 0.1));
+  DECLARE_SENSOR(car, ECM, ECM_THROTTLE_ANGLE,       "Throttle angle",       ARRAY(0xa6, 0x10, 0x4e, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 100 / 255.0));
+  DECLARE_SENSOR(car, ECM, ECM_MAF,                  "Mass air flow",        ARRAY(0xa6, 0x10, 0x9a, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.1));
   DECLARE_SENSOR(car, ECM, ECM_VVT_IN_ANGLE,         "VVT inlet angle",      ARRAY(0xa6, 0x13, 0x63, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0390625));
   DECLARE_SENSOR(car, ECM, ECM_VVT_EX_ANGLE,         "VVT exhaust angle",    ARRAY(0xa6, 0x13, 0x62, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256L * bytes[5] + bytes[6]) * 0.0390625));
   DECLARE_SENSOR(car, ECM, ECM_BTDC,                 "BTDC",                 ARRAY(0xa6, 0x10, 0x2c, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 191.25 / 255));
