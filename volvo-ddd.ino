@@ -402,6 +402,10 @@ void genie_next_screen() {
   current_screen = (current_screen + 1) % (my_display.max_screen + 1);
 }
 
+void genie_previous_screen() {
+  current_screen = (current_screen + my_display.max_screen) % (my_display.max_screen + 1);
+}
+
 void print_frame(const char *s, CAN_FRAME *in)
 {
   if (debug_print) {
@@ -1028,6 +1032,7 @@ void cem_ambient_light_cb(struct sensor *sensor)
 
 void tcm_gearbox_position_cb(struct sensor *sensor)
 {
+  SerialEx.printf("radio tcm %d\n", get_sensor_value(sensor, 1));
   radio_event(&my_radio, RADIO_EVENT_GEARBOX, get_sensor_value(sensor, 1));
 }
 
@@ -1040,8 +1045,13 @@ void ccm_switch_status_cb(struct sensor *sensor)
   if (status && !last_status) {         /* press */
     last_pressed_time = millis();
   } else if (!status && last_status) {  /* release */
-    if (!once)
-      genie_next_screen();
+    if (!once) {
+      if (millis() - last_pressed_time < 1000) {
+        genie_next_screen();
+      } else {
+        genie_previous_screen();
+      }
+    }
     once = false;
   } else if (status && last_status) {   /* press and hold */
     if (!once && (millis() - last_pressed_time > 3000)) {
