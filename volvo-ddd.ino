@@ -919,9 +919,12 @@ void radio_isr_stop()
 }
 
 #define SWC_PIN     44
-#define ILLUMI_PIN  42
-#define PARK_PIN    40
+#define RTI_PIN     42
+#define ILLUMI_PIN  40
 #define CAMERA_PIN  38
+#define GPS_BUT_PIN 36
+#define GPS_PWR_PIN 34
+#define PARK_PIN    32 // no op, no free wires in new design...
 
 void setup_radio(struct radio *radio)
 {
@@ -1032,7 +1035,6 @@ void cem_ambient_light_cb(struct sensor *sensor)
 
 void tcm_gearbox_position_cb(struct sensor *sensor)
 {
-  SerialEx.printf("radio tcm %d\n", get_sensor_value(sensor, 1));
   radio_event(&my_radio, RADIO_EVENT_GEARBOX, get_sensor_value(sensor, 1));
 }
 
