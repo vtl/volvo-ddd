@@ -24,10 +24,12 @@ float temp_c_to_f(float c)
   return c * 1.8 + 32;
 }
 
-#define LCD_RESETLINE 2
+#define LCD_RESET_LINE 2
+#define LCD_RESET_DELAY 5500
+#define WDT_TIMEOUT (LCD_RESET_DELAY + 500)
 
 Genie genie;
-StreamEx SerialEx = SerialUSB;
+StreamEx SerialEx = Serial;//SerialUSB;
 
 #define CAN_HS Can0
 #define CAN_LS Can1
@@ -357,12 +359,12 @@ void reset_genie(Genie *genie)
   genie->assignDebugPort(Serial);
   Serial2.begin(200000);
   genie->Begin(Serial2);
-  pinMode(LCD_RESETLINE, OUTPUT);
-  digitalWrite(LCD_RESETLINE, LOW);
+  pinMode(LCD_RESET_LINE, OUTPUT);
+  digitalWrite(LCD_RESET_LINE, LOW);
   delay(100);
-  digitalWrite(LCD_RESETLINE, HIGH);
+  digitalWrite(LCD_RESET_LINE, HIGH);
 
-  delay(5500); //let the display start up after the reset (This is important)
+  delay(LCD_RESET_DELAY); //let the display start up after the reset (This is important)
   SerialEx.printf("done\n");
 }
 
@@ -389,8 +391,10 @@ void refresh_display(struct genie_display *display, int screen)
     force = true;
   }
   for (int i = 0; i < display->widget_count; i++) {
-    if (display->widget[i].screen == display->current_screen)
+    if (display->widget[i].screen == display->current_screen) {
+      watchdogReset();
       widget_update(&display->widget[i], force);
+    }
   }
 }
 
@@ -1066,10 +1070,16 @@ void ccm_switch_status_cb(struct sensor *sensor)
   sensor->acked = true;
 }
 
+extern "C" void _watchdogEnable (void) {}
+
+void watchdogSetup (void) __attribute__ ((weak, alias("_watchdogEnable")));
+
 void setup()
 {
   Serial.begin(115200);
   SerialEx.printf("start\n");
+  SerialEx.printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
+  watchdogEnable(WDT_TIMEOUT);
   setup_car(&my_car);
   setup_radio(&my_radio);
   setup_canbus(&my_car);
@@ -1079,6 +1089,7 @@ void setup()
 void loop()
 {
   while (1) {
+    watchdogReset();
     query_all_sensors(&my_car);
     refresh_display(&my_display, current_screen);
   }
