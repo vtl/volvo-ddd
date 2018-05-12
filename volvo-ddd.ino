@@ -413,6 +413,20 @@ void refresh_display(struct genie_display *display, int screen)
   }
 }
 
+bool set_widget(struct genie_display *display, const char *name, long value)
+{
+  int i;
+
+  for (i = 0; i < display->widget_count; i++) {
+    if (strcmp(display->widget[i].name, name) == 0) {
+      display->widget[i].current_value = value;
+      break;
+    }
+  }
+
+  return i != display->widget_count;
+}
+
 car_t my_car;
 genie_display my_display;
 int current_screen = 0;
@@ -1027,13 +1041,7 @@ void radio_toggle_canbus()
   my_car.can_poll = !my_car.can_poll;
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
 
-  for (int i = 0; i < my_display.widget_count; i++) {
-    genie_widget *widget = &my_display.widget[i];
-  
-    if (strcmp(widget->name, "Can poll") == 0)
-      widget->current_value = my_car.can_poll;
-  }
-
+  set_widget(&my_display, "Can poll", my_car.can_poll);
 }
 
 void radio_event(struct radio *radio, int function, int param)
@@ -1202,12 +1210,7 @@ void setup()
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
 
-  for (int i = 0; i < my_display.widget_count; i++) {
-    genie_widget *widget = &my_display.widget[i];
-  
-    if (strcmp(widget->name, "Can poll") == 0)
-      widget->current_value = 1;
-  }
+  set_widget(&my_display, "Can poll", 1);
 }
 
 void loop()
