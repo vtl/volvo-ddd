@@ -153,4 +153,5 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, CCM, CCM_BLOWER_DUTY,         "Cabin fan speed",      ARRAY(0xa6, 0x00, 0x30, 0x01),  VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 }

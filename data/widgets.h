@@ -98,3 +98,10 @@ DECLARE_WIDGET("BTDC",          display, 6, GENIE_OBJ_LED_DIGITS, 32, 0, 65535, 
 DECLARE_WIDGET("BTDC sign",     display, 6, GENIE_OBJ_USER_LED, 15, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, ECM, ECM_BTDC)));
 DECLARE_WIDGET("Fan duty",      display, 6, GENIE_OBJ_LED_DIGITS, 36, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_FAN_DUTY), 1));
 DECLARE_WIDGET("Misfire",       display, 6, GENIE_OBJ_LED_DIGITS, 39, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_MISFIRE_COUNTER), 1));
+
+DECLARE_WIDGET("GPS navigation",          display, 7, GENIE_OBJ_4DBUTTON, 1, 0, 1, event_gps_navigation(widget));
+DECLARE_WIDGET("Left display",            display, 7, GENIE_OBJ_4DBUTTON, 0, 0, 1, event_left_display(widget));
+DECLARE_WIDGET("Right display",           display, 7, GENIE_OBJ_4DBUTTON, 2, 0, 1, event_right_display(widget));
+DECLARE_WIDGET("SRI reset",               display, 8, GENIE_OBJ_4DBUTTON, 3, 0, 1, event_sri_reset(widget));
+DECLARE_WIDGET("Transmission adaptation", display, 8, GENIE_OBJ_4DBUTTON, 4, 0, 1, event_transmission_adaptation(widget));
+DECLARE_WIDGET("Can poll",                display, 8, GENIE_OBJ_4DBUTTON, 5, 0, 1, event_can_poll(widget));

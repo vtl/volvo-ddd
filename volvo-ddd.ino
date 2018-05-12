@@ -28,8 +28,18 @@ float temp_c_to_f(float c)
 #define LCD_RESET_DELAY 5500
 #define WDT_TIMEOUT (LCD_RESET_DELAY + 500)
 
+#define SWC_PIN     44
+#define RTI_PIN     42
+#define ILLUMI_PIN  40
+#define CAMERA_PIN  38
+#define GPS_BUT_PIN 36
+#define GPS_PWR_PIN 34
+#define PARK_PIN    32 // no op, no free wires in new design...
+#define RSE_LEFT_DISPLAY_EN_PIN  30
+#define RSE_RIGHT_DISPLAY_EN_PIN 28
+
 Genie genie;
-StreamEx SerialEx = Serial;//SerialUSB;
+StreamEx SerialEx = SerialUSB;
 
 #define CAN_HS Can0
 #define CAN_LS Can1
@@ -284,7 +294,8 @@ typedef struct genie_widget {
   long last_value = -1;
   long min_value;
   long max_value;
-  long (*value_fn)(struct genie_widget *);
+  long current_value;
+  long (*fn)(struct genie_widget *);
 } genie_widget_t;
 
 #define MAX_WIDGETS 128
@@ -306,7 +317,10 @@ void widget_update(struct genie_widget *widget, bool force)
   if (!widget->display->enabled)
     return;
 
-  long new_value = widget->value_fn(widget);
+  if (widget->object_type == GENIE_OBJ_4DBUTTON)
+    return;
+
+  long new_value = widget->fn(widget);
 
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
@@ -348,7 +362,7 @@ void widget_update(struct genie_widget *widget, bool force)
     widget->object_index = _object_index; \
     widget->min_value = _min; \
     widget->max_value = _max; \
-    widget->value_fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_fn); }; \
+    widget->fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_fn); }; \
     widget->display->widget_count++;       \
     widget->display->max_screen = max(widget->display->max_screen, _screen); \
   } while (0)
@@ -359,6 +373,7 @@ void reset_genie(Genie *genie)
   genie->assignDebugPort(Serial);
   Serial2.begin(200000);
   genie->Begin(Serial2);
+  genie->AttachEventHandler(display_event_callback);
   pinMode(LCD_RESET_LINE, OUTPUT);
   digitalWrite(LCD_RESET_LINE, LOW);
   delay(100);
@@ -648,6 +663,12 @@ void setup_canbus(struct car *car)
 void setup_car(struct car *car)
 {
   car_init(car);
+
+  pinMode(RSE_LEFT_DISPLAY_EN_PIN, OUTPUT);
+  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, HIGH);
+  pinMode(RSE_RIGHT_DISPLAY_EN_PIN, OUTPUT);
+  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, HIGH);
+
   SerialEx.printf("setup %s... done\n", car->name);
 }
 
@@ -922,14 +943,6 @@ void radio_isr_stop()
   radio->busy = false;
 }
 
-#define SWC_PIN     44
-#define RTI_PIN     42
-#define ILLUMI_PIN  40
-#define CAMERA_PIN  38
-#define GPS_BUT_PIN 36
-#define GPS_PWR_PIN 34
-#define PARK_PIN    32 // no op, no free wires in new design...
-
 void setup_radio(struct radio *radio)
 {
   radio->timer = &Timer6;
@@ -1068,6 +1081,96 @@ void ccm_switch_status_cb(struct sensor *sensor)
   }
   last_status = status;
   sensor->acked = true;
+}
+
+void display_event_callback(void)
+{
+  genieFrame Event;
+  struct genie_display *display = &my_display;
+
+  display->genie.DequeueEvent(&Event);
+
+  if (Event.reportObject.cmd == GENIE_REPORT_EVENT) {
+    for (int i = 0; i < display->widget_count; i++) {
+      if ((display->widget[i].object_type  == Event.reportObject.object) &&
+          (display->widget[i].object_index == Event.reportObject.index)) {
+        struct genie_widget *widget = &display->widget[i];
+        widget->current_value = display->genie.GetEventData(&Event);
+
+        //if (debug_print)
+          SerialEx.printf("input %s data %d\n", widget->name, widget->current_value);
+        widget->fn(widget);
+      }          
+    }
+  }
+}
+
+
+
+
+long event_gps_navigation(struct genie_widget *widget)
+{
+}
+
+long event_left_display(struct genie_widget *widget)
+{
+  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !widget->current_value);
+}
+
+long event_right_display(struct genie_widget *widget)
+{
+  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !widget->current_value);
+}
+
+long event_sri_reset(struct genie_widget *widget)
+{
+  CAN_FRAME out;
+
+  if (debug_print)
+    SerialEx.printf("SRI reset\n");
+
+  memset(out.data.bytes, 0, 8);
+  out.id = 0x0ffffe;
+  out.extended = true;
+  out.priority = 4;
+  out.length = 8;
+
+  out.data.byte[0] = 0xcb;
+  out.data.byte[1] = 0x51;
+  out.data.byte[2] = 0xb2;
+  out.data.byte[3] = 0x01;
+
+  //  print_frame("OUT", &out);
+  CAN_HS.sendFrame(out);
+}
+
+long event_transmission_adaptation(struct genie_widget *widget)
+{
+  CAN_FRAME out;
+
+  if (debug_print)
+    SerialEx.printf("Transmission adaptation\n");
+
+  memset(out.data.bytes, 0, 8);
+  out.id = 0x0ffffe;
+  out.extended = true;
+  out.priority = 4;
+  out.length = 8;
+
+  out.data.byte[0] = 0xcb;
+  out.data.byte[1] = 0x6e;
+  out.data.byte[2] = 0xb2;
+  out.data.byte[3] = 0x50;
+
+  //  print_frame("OUT", &out);
+  CAN_HS.sendFrame(out);
+}
+
+long event_can_poll(struct genie_widget *widget)
+{
+  if (widget->current_value != widget->display->car->can_poll) {
+    widget->display->car->can_poll = !!widget->current_value;
+  }
 }
 
 extern "C" void _watchdogEnable (void) {}

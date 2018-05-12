@@ -116,3 +116,17 @@ Statictext43   BTDC
 Userled15 (ECMBTDCSIGN)   
 Userled16 (ECMVVTINSIGN)   
 Userled17 (ECMVVTEXSIGN)   
+-Form7 (RTI-RSE)
+4Dbutton0   
+4Dbutton1   
+4Dbutton2   
+Statictext44   GPS NAV
+Statictext45   LEFT DISP
+Statictext46   RIGHT DISP
+-Form8 (RESET)
+4Dbutton3 (SRIRESET)   
+4Dbutton4 (TRANSADAPT)   
+4Dbutton5 (CANPOLL)   
+Statictext47   SRI RESET
+Statictext48   TRANS ADAPT
+Statictext49   CAN POLL
