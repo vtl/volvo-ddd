@@ -317,8 +317,8 @@ void widget_update(struct genie_widget *widget, bool force)
   if (!widget->display->enabled)
     return;
 
-  if (widget->object_type == GENIE_OBJ_4DBUTTON)
-    return;
+//  if (widget->object_type == GENIE_OBJ_4DBUTTON)
+//    return;
 
   long new_value = widget->fn(widget);
 
@@ -1026,6 +1026,14 @@ void radio_toggle_canbus()
 
   my_car.can_poll = !my_car.can_poll;
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
+
+  for (int i = 0; i < my_display.widget_count; i++) {
+    genie_widget *widget = &my_display.widget[i];
+  
+    if (strcmp(widget->name, "Can poll") == 0)
+      widget->current_value = my_car.can_poll;
+  }
+
 }
 
 void radio_event(struct radio *radio, int function, int param)
@@ -1110,16 +1118,19 @@ void display_event_callback(void)
 
 long event_gps_navigation(struct genie_widget *widget)
 {
+  return widget->current_value;
 }
 
 long event_left_display(struct genie_widget *widget)
 {
   digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !widget->current_value);
+  return widget->current_value;
 }
 
 long event_right_display(struct genie_widget *widget)
 {
   digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !widget->current_value);
+  return widget->current_value;
 }
 
 long event_sri_reset(struct genie_widget *widget)
@@ -1142,6 +1153,7 @@ long event_sri_reset(struct genie_widget *widget)
 
   //  print_frame("OUT", &out);
   CAN_HS.sendFrame(out);
+  return widget->current_value;
 }
 
 long event_transmission_adaptation(struct genie_widget *widget)
@@ -1164,6 +1176,7 @@ long event_transmission_adaptation(struct genie_widget *widget)
 
   //  print_frame("OUT", &out);
   CAN_HS.sendFrame(out);
+  return widget->current_value;
 }
 
 long event_can_poll(struct genie_widget *widget)
@@ -1171,6 +1184,7 @@ long event_can_poll(struct genie_widget *widget)
   if (widget->current_value != widget->display->car->can_poll) {
     widget->display->car->can_poll = !!widget->current_value;
   }
+  return widget->current_value;
 }
 
 extern "C" void _watchdogEnable (void) {}
@@ -1187,6 +1201,13 @@ void setup()
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
+
+  for (int i = 0; i < my_display.widget_count; i++) {
+    genie_widget *widget = &my_display.widget[i];
+  
+    if (strcmp(widget->name, "Can poll") == 0)
+      widget->current_value = 1;
+  }
 }
 
 void loop()
