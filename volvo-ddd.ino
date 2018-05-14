@@ -15,6 +15,7 @@ int debug_print = 0;
 #include <genieArduino.h>
 #include <PrintEx.h>
 #include <DueTimer.h>
+#include <eeprom_93c86.h> // https://github.com/vtl/eeprom_93c86
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -37,6 +38,14 @@ float temp_c_to_f(float c)
 #define PARK_PIN    32 // no op, no free wires in new design...
 #define RSE_LEFT_DISPLAY_EN_PIN  30
 #define RSE_RIGHT_DISPLAY_EN_PIN 28
+
+#define EEPROM_MAGIC_0      0xAA
+#define EEPROM_MAGIC_1      0x55
+#define EEPROM_CURRENT_SCREEN 16
+#define EEPROM_CAN_POLL       17
+#define EEPROM_RSE_LEFT_EN    18
+#define EEPROM_RSE_RIGHT_EN   19
+#define EEPROM_RTI_EN         20
 
 Genie genie;
 StreamEx SerialEx = SerialUSB;
@@ -1041,6 +1050,7 @@ void radio_toggle_canbus()
   my_car.can_poll = !my_car.can_poll;
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
 
+  store_to_eeprom(EEPROM_CAN_POLL, my_car.can_poll);
   set_widget(&my_display, "Can poll", my_car.can_poll);
 }
 
@@ -1121,8 +1131,15 @@ void display_event_callback(void)
   }
 }
 
+void rse_left_display_en(bool en)
+{
+  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !en);
+}
 
-
+void rse_right_display_en(bool en)
+{
+  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !en);
+}
 
 long event_gps_navigation(struct genie_widget *widget)
 {
@@ -1131,13 +1148,15 @@ long event_gps_navigation(struct genie_widget *widget)
 
 long event_left_display(struct genie_widget *widget)
 {
-  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !widget->current_value);
+  rse_left_display_en(widget->current_value);
+  store_to_eeprom(EEPROM_RSE_LEFT_EN, widget->current_value);
   return widget->current_value;
 }
 
 long event_right_display(struct genie_widget *widget)
 {
-  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !widget->current_value);
+  rse_right_display_en(widget->current_value);
+  store_to_eeprom(EEPROM_RSE_RIGHT_EN, widget->current_value);
   return widget->current_value;
 }
 
@@ -1191,6 +1210,7 @@ long event_can_poll(struct genie_widget *widget)
 {
   if (widget->current_value != widget->display->car->can_poll) {
     widget->display->car->can_poll = !!widget->current_value;
+    store_to_eeprom(EEPROM_CAN_POLL, widget->display->car->can_poll);
   }
   return widget->current_value;
 }
@@ -1198,6 +1218,40 @@ long event_can_poll(struct genie_widget *widget)
 extern "C" void _watchdogEnable (void) {}
 
 void watchdogSetup (void) __attribute__ ((weak, alias("_watchdogEnable")));
+
+int eeprom_ready = 0;
+
+void setup_eeprom(void)
+{
+  eeprom_ewen();
+  for (int i = 0; i < 2; i++) {
+    if ((eeprom_read(0) == EEPROM_MAGIC_0) &&
+        (eeprom_read(1) == EEPROM_MAGIC_1)) {
+        eeprom_ready = 1;
+    } else {
+       eeprom_write(0, EEPROM_MAGIC_0);
+       eeprom_write(1, EEPROM_MAGIC_1);
+    }
+  }
+  if (eeprom_ready)
+    SerialEx.printf("EEPROM OK");
+  else
+    SerialEx.printf("EEPROM was not found");
+}
+
+unsigned char load_from_eeprom(int address, unsigned char def)
+{
+  if (!eeprom_ready)
+    return def;
+  return eeprom_read(address);
+}
+
+void store_to_eeprom(int address, unsigned char value)
+{
+  if (!eeprom_ready)
+    return;
+  eeprom_write(address, value);
+}
 
 void setup()
 {
@@ -1209,8 +1263,12 @@ void setup()
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
+  setup_eeprom();
 
-  set_widget(&my_display, "Can poll", 1);
+  current_screen = load_from_eeprom(EEPROM_CURRENT_SCREEN, 0);
+  set_widget(&my_display, "Can poll", load_from_eeprom(EEPROM_CAN_POLL, 1));
+  rse_left_display_en(load_from_eeprom(EEPROM_RSE_LEFT_EN, 0));
+  rse_right_display_en(load_from_eeprom(EEPROM_RSE_RIGHT_EN, 0));
 }
 
 void loop()
