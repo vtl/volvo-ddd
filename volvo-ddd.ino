@@ -440,12 +440,20 @@ car_t my_car;
 genie_display my_display;
 int current_screen = 0;
 
-void genie_next_screen() {
-  current_screen = (current_screen + 1) % (my_display.max_screen + 1);
+void genie_change_screen(int offset)
+{
+  current_screen = (current_screen + offset) % (my_display.max_screen + 1);
+  store_to_eeprom(EEPROM_CURRENT_SCREEN, current_screen);
 }
 
-void genie_previous_screen() {
-  current_screen = (current_screen + my_display.max_screen) % (my_display.max_screen + 1);
+void genie_next_screen()
+{
+  genie_change_screen(1);
+}
+
+void genie_previous_screen()
+{
+  genie_change_screen(my_display.max_screen);
 }
 
 void print_frame(const char *s, CAN_FRAME *in)
@@ -1265,7 +1273,7 @@ void setup()
   setup_genie_display(&my_display, &my_car);
   setup_eeprom();
 
-  current_screen = load_from_eeprom(EEPROM_CURRENT_SCREEN, 0);
+  current_screen = load_from_eeprom(EEPROM_CURRENT_SCREEN, 0) % my_display.max_screen;
   set_widget(&my_display, "Can poll", load_from_eeprom(EEPROM_CAN_POLL, 1));
   rse_left_display_en(load_from_eeprom(EEPROM_RSE_LEFT_EN, 0));
   rse_right_display_en(load_from_eeprom(EEPROM_RSE_RIGHT_EN, 0));
