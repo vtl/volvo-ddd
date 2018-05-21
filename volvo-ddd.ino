@@ -36,8 +36,8 @@ float temp_c_to_f(float c)
 #define GPS_BUT_PIN 36
 #define GPS_PWR_PIN 34
 #define PARK_PIN    32 // no op, no free wires in new design...
-#define RSE_LEFT_DISPLAY_EN_PIN  43
-#define RSE_RIGHT_DISPLAY_EN_PIN 45
+#define RSE_LEFT_DISPLAY_EN_PIN  45
+#define RSE_RIGHT_DISPLAY_EN_PIN 43
 
 #define EEPROM_MAGIC_0      0xAA
 #define EEPROM_MAGIC_1      0x55
@@ -1141,13 +1141,23 @@ void display_event_callback(void)
 
 void rse_left_display_en(bool en)
 {
-  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, en ? LOW : HIGH);
+  static bool last_state = false;
+  if (en == last_state)
+    return;
+  last_state = en;
+  SerialEx.printf("left display %d\n", en);
+  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !en);
   store_to_eeprom(EEPROM_RSE_LEFT_EN, en);
 }
 
 void rse_right_display_en(bool en)
 {
-  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, en ? LOW : HIGH);
+  static bool last_state = false;
+  if (en == last_state)
+    return;
+  last_state = en;
+  SerialEx.printf("right display %d\n", en);
+  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !en);
   store_to_eeprom(EEPROM_RSE_RIGHT_EN, en);
 }
 
