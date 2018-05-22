@@ -48,7 +48,7 @@ float temp_c_to_f(float c)
 #define EEPROM_RTI_EN         20
 
 Genie genie;
-StreamEx SerialEx = SerialUSB;
+StreamEx SerialEx = Serial;//USB;
 
 #define CAN_HS Can0
 #define CAN_LS Can1
@@ -304,7 +304,8 @@ typedef struct genie_widget {
   long min_value;
   long max_value;
   long current_value;
-  long (*fn)(struct genie_widget *);
+  long (*val_fn)(struct genie_widget *);
+  void (*cb_fn)(struct genie_widget *);
 } genie_widget_t;
 
 #define MAX_WIDGETS 128
@@ -329,7 +330,7 @@ void widget_update(struct genie_widget *widget, bool force)
 //  if (widget->object_type == GENIE_OBJ_4DBUTTON)
 //    return;
 
-  long new_value = widget->fn(widget);
+  long new_value = widget->val_fn(widget);
 
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
@@ -360,7 +361,7 @@ void widget_update(struct genie_widget *widget, bool force)
   }
 }
 
-#define DECLARE_WIDGET(_name, _display, _screen, _object_type, _object_index, _min, _max, _fn) \
+#define DECLARE_WIDGET(_name, _display, _screen, _object_type, _object_index, _min, _max, _val_fn, _cb_fn) \
   do { \
     struct genie_widget *widget = &_display->widget[_display->widget_count]; \
     assert(_display->widget_count < MAX_WIDGETS); \
@@ -371,7 +372,8 @@ void widget_update(struct genie_widget *widget, bool force)
     widget->object_index = _object_index; \
     widget->min_value = _min; \
     widget->max_value = _max; \
-    widget->fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_fn); }; \
+    widget->val_fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_val_fn); }; \
+    widget->cb_fn = [](struct genie_widget *widget)->void { struct car *car = widget->display->car; return (_cb_fn); }; \
     widget->display->widget_count++;       \
     widget->display->max_screen = max(widget->display->max_screen, _screen); \
   } while (0)
@@ -1133,7 +1135,8 @@ void display_event_callback(void)
 
         //if (debug_print)
           SerialEx.printf("input %s data %d\n", widget->name, widget->current_value);
-        widget->fn(widget);
+        if (widget->cb_fn)
+          widget->cb_fn(widget);
       }          
     }
   }
@@ -1161,30 +1164,28 @@ void rse_right_display_en(bool en)
   store_to_eeprom(EEPROM_RSE_RIGHT_EN, en);
 }
 
-long event_gps_navigation(struct genie_widget *widget)
+void event_gps_navigation(struct genie_widget *widget)
 {
-  return widget->current_value;
+  SerialEx.printf("event GPS nav\n");
 }
 
-long event_left_display(struct genie_widget *widget)
+void event_left_display(struct genie_widget *widget)
 {
+  SerialEx.printf("event left display\n");
   rse_left_display_en(widget->current_value);
-  store_to_eeprom(EEPROM_RSE_LEFT_EN, widget->current_value);
-  return widget->current_value;
 }
 
-long event_right_display(struct genie_widget *widget)
+void event_right_display(struct genie_widget *widget)
 {
+  SerialEx.printf("event right display\n");
   rse_right_display_en(widget->current_value);
-  store_to_eeprom(EEPROM_RSE_RIGHT_EN, widget->current_value);
-  return widget->current_value;
 }
 
-long event_sri_reset(struct genie_widget *widget)
+void event_sri_reset(struct genie_widget *widget)
 {
   CAN_FRAME out;
 
-  if (debug_print)
+//  if (debug_print)
     SerialEx.printf("SRI reset\n");
 
   memset(out.data.bytes, 0, 8);
@@ -1200,14 +1201,13 @@ long event_sri_reset(struct genie_widget *widget)
 
   //  print_frame("OUT", &out);
   CAN_HS.sendFrame(out);
-  return widget->current_value;
 }
 
-long event_transmission_adaptation(struct genie_widget *widget)
+void event_transmission_adaptation(struct genie_widget *widget)
 {
   CAN_FRAME out;
 
-  if (debug_print)
+//  if (debug_print)
     SerialEx.printf("Transmission adaptation\n");
 
   memset(out.data.bytes, 0, 8);
@@ -1223,16 +1223,16 @@ long event_transmission_adaptation(struct genie_widget *widget)
 
   //  print_frame("OUT", &out);
   CAN_HS.sendFrame(out);
-  return widget->current_value;
 }
 
-long event_can_poll(struct genie_widget *widget)
+void event_can_poll(struct genie_widget *widget)
 {
+  SerialEx.printf("event CAN poll\n");
+  
   if (widget->current_value != widget->display->car->can_poll) {
     widget->display->car->can_poll = !!widget->current_value;
     store_to_eeprom(EEPROM_CAN_POLL, widget->display->car->can_poll);
   }
-  return widget->current_value;
 }
 
 extern "C" void _watchdogEnable (void) {}
@@ -1243,33 +1243,47 @@ int eeprom_ready = 0;
 
 void setup_eeprom(void)
 {
+  unsigned char magic_0, magic_1;
+
   eeprom_ewen();
   for (int i = 0; i < 2; i++) {
-    if ((eeprom_read(0) == EEPROM_MAGIC_0) &&
-        (eeprom_read(1) == EEPROM_MAGIC_1)) {
+    magic_0 = eeprom_read(0);
+    magic_1 = eeprom_read(1);
+    SerialEx.printf("[%d] EEPROM magic_0 = 0x%02x\n", i, magic_0);
+    SerialEx.printf("[%d] EEPROM magic_1 = 0x%02x\n", i, magic_1);
+    if ((magic_0 == EEPROM_MAGIC_0) &&
+        (magic_1 == EEPROM_MAGIC_1)) {
         eeprom_ready = 1;
+        break;
     } else {
        eeprom_write(0, EEPROM_MAGIC_0);
        eeprom_write(1, EEPROM_MAGIC_1);
     }
   }
   if (eeprom_ready)
-    SerialEx.printf("EEPROM OK");
+    SerialEx.printf("EEPROM OK\n");
   else
-    SerialEx.printf("EEPROM was not found");
+    SerialEx.printf("EEPROM was not found\n");
 }
 
 unsigned char load_from_eeprom(int address, unsigned char def)
 {
+  unsigned char value;
+
   if (!eeprom_ready)
     return def;
-  return eeprom_read(address);
+  value = eeprom_read(address);
+//  if (debug)
+    SerialEx.printf("load from EEPROM at address %d, got value %d\n", address, value);
+  return value;
 }
 
 void store_to_eeprom(int address, unsigned char value)
 {
   if (!eeprom_ready)
     return;
+//  if (debug)
+    SerialEx.printf("store to EEPROM at address %d value %d\n", address, value);
   eeprom_write(address, value);
 }
 
@@ -1280,15 +1294,24 @@ void setup()
   SerialEx.printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
   watchdogEnable(WDT_TIMEOUT);
   setup_car(&my_car);
+  setup_eeprom();
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
-  setup_eeprom();
 
   current_screen = load_from_eeprom(EEPROM_CURRENT_SCREEN, 0) % my_display.max_screen;
+  SerialEx.printf("current_screen = %d\n", current_screen);
   set_widget(&my_display, "Can poll", load_from_eeprom(EEPROM_CAN_POLL, 1));
-  rse_left_display_en(load_from_eeprom(EEPROM_RSE_LEFT_EN, 0));
-  rse_right_display_en(load_from_eeprom(EEPROM_RSE_RIGHT_EN, 0));
+
+  bool en;
+
+  en = load_from_eeprom(EEPROM_RSE_LEFT_EN, 0);
+  set_widget(&my_display, "Left display", en);
+  rse_left_display_en(en);
+
+  en = load_from_eeprom(EEPROM_RSE_RIGHT_EN, 0);
+  set_widget(&my_display, "Right display", en);
+  rse_right_display_en(en);
 }
 
 void loop()
