@@ -3,7 +3,7 @@
 
    A car junkie display :)
 
-   (c) 2016 Vitaly Mayatskikh <vitaly@gravicappa.info>
+   (c) 2016-2018 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
 int debug_print = 0;
@@ -1245,6 +1245,7 @@ void setup_eeprom(void)
 {
   unsigned char magic_0, magic_1;
 
+  eeprom_init(11, 12, 9, 8);
   eeprom_ewen();
   for (int i = 0; i < 2; i++) {
     magic_0 = eeprom_read(0);
