@@ -1,0 +1,132 @@
+ 1 GND
+ 2 BAT
+ 3 ACC
+ 4 CAN-L-
+ 5 CAN-L+
+ 6 CAN-H-
+ 7 CAN-H+
+ 8 SWC
+ 9 DIMMER
+10 PARKING
+11 REAR
+12 RTI SERIAL (display up/down)
+13 GARMIN PWR RELAY
+14 GARMIN PWR BUTTON RELAY (power button press)
+15 4D GND
+16 4D +5
+17 4D RST
+18 4D TX
+19 4D RX
+
+
+
+     DB-25 D
+
+
+       N/C  1
+              14 C GND
+  4D RX  C  2
+              15 C 4D TX
+  GND    C  3
+              16 C GND
+  4D RST C  4
+              17 C GND
+  4D +5  C  5
+              18 B GPS BUT ON
+  REAR   B  6
+              19 B GPS PWR ON
+  ACC+   B  7
+              20 B GND
+  DIMMER B  8
+              21 B RTI SERIAL
+  SWC    B  9
+              22 A GND
+  CAN-L+ A 10
+              23 A ACC
+  CAN-L- A 11
+              24 A BAT
+  CAN-H+ A 12
+              25 A GND
+  CAN-H- A 13
+
+
+
+     DB-9 A
+
+   ACC  D23 1
+               6  D24 BAT
+   GND  D22 2
+               7  D12 CAN-H+
+        N/C 3
+               8  D13 CAN-H-
+ CAN-L- D10 4
+               9  D25 GND
+ CAN-L+ D11 5
+
+
+
+     DB-9 B   WHITE RING
+
+        N/C 1
+               6  D9 REAR 
+  GND   D20 2
+               7  D8 DIMMER
+  RTI S D21 3
+               8  D7 ACC+
+  GPS B D18 4
+               9  D6 SWC
+  GPS P D19 5
+
+
+
+
+     DB-9 C   BLACK RING
+
+
+  4D +5  D5 1
+               6  D3 GND
+  4D RST D4 2
+               7  D2 4D RX
+  GND   D16 3
+               8 D14 GND
+  GND   D17 4
+               9 D15 4D TX
+        N/C 5
+
+
+
+ 1 PWR           #2
+ 2 WAKE-UP       #3
+ 3 CAN+          #4
+ 4 CAN-          #5
+ 5 IR            #12
+
+ 6 AUDIO GND     #11
+ 7 AUDIO LEFT    #9
+ 8 AUDIO RIGHT   #10
+10 VIDEO+        #8
+11 VIDEO-        #7
+
+12 GND           #1
+
+
+
+PIN 44,42       PULL  +5
+PIN 40,38,36,34 PULL +12
+
+
+
+
+
+
+     DB-9 VIDEO
+
+orange        +12 1
+                     6  D3 LEFT EN   green
+orange-white  +12 2
+                     7  D2 RIGHT EN  green-white
+              +12 3
+                     8  GND          brown
+brown-white N/C 4
+                     9  GND          blue-white
+blue        GND 5

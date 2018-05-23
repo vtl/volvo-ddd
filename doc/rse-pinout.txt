@@ -1,0 +1,15 @@
+ 1 GND           black
+ 2 12V           red/white
+ 3 wake          violet/gray
+ 4 CAN+          green #1
+ 5 CAN-          white #1
+ 6 N/C           orange
+ 7 video-        pink
+ 8 video+        gray
+ 9  
+10
+11
+12 IR            white #2
+13 audio gnd     brown
+14 audio right   green #2
+15 audio left    yellow
