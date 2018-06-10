@@ -445,7 +445,7 @@ int current_screen = 0;
 void genie_change_screen(int offset)
 {
   current_screen = (current_screen + offset) % (my_display.max_screen + 1);
-  store_to_eeprom(EEPROM_CURRENT_SCREEN, current_screen);
+  eeprom_store(EEPROM_CURRENT_SCREEN, current_screen);
 }
 
 void genie_next_screen()
@@ -1060,7 +1060,7 @@ void radio_toggle_canbus()
   my_car.can_poll = !my_car.can_poll;
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
 
-  store_to_eeprom(EEPROM_CAN_POLL, my_car.can_poll);
+  eeprom_store(EEPROM_CAN_POLL, my_car.can_poll);
   set_widget(&my_display, "Can poll", my_car.can_poll);
 }
 
@@ -1150,7 +1150,7 @@ void rse_left_display_en(bool en)
   last_state = en;
   SerialEx.printf("left display %d\n", en);
   digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !en);
-  store_to_eeprom(EEPROM_RSE_LEFT_EN, en);
+  eeprom_store(EEPROM_RSE_LEFT_EN, en);
 }
 
 void rse_right_display_en(bool en)
@@ -1161,12 +1161,13 @@ void rse_right_display_en(bool en)
   last_state = en;
   SerialEx.printf("right display %d\n", en);
   digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !en);
-  store_to_eeprom(EEPROM_RSE_RIGHT_EN, en);
+  eeprom_store(EEPROM_RSE_RIGHT_EN, en);
 }
 
 void event_gps_navigation(struct genie_widget *widget)
 {
   SerialEx.printf("event GPS nav\n");
+  rti_en(widget->current_value);
 }
 
 void event_left_display(struct genie_widget *widget)
@@ -1231,7 +1232,7 @@ void event_can_poll(struct genie_widget *widget)
   
   if (widget->current_value != widget->display->car->can_poll) {
     widget->display->car->can_poll = !!widget->current_value;
-    store_to_eeprom(EEPROM_CAN_POLL, widget->display->car->can_poll);
+    eeprom_store(EEPROM_CAN_POLL, widget->display->car->can_poll);
   }
 }
 
@@ -1256,7 +1257,7 @@ void setup_eeprom(void)
         (magic_1 == EEPROM_MAGIC_1)) {
         eeprom_ready = 1;
         break;
-    } else {
+    } else { // try to init EEPROM
        eeprom_write(0, EEPROM_MAGIC_0);
        eeprom_write(1, EEPROM_MAGIC_1);
     }
@@ -1267,26 +1268,102 @@ void setup_eeprom(void)
     SerialEx.printf("EEPROM was not found\n");
 }
 
-unsigned char load_from_eeprom(int address, unsigned char def)
+unsigned char eeprom_load(int address, unsigned char def)
 {
   unsigned char value;
 
   if (!eeprom_ready)
     return def;
   value = eeprom_read(address);
-//  if (debug)
+  if (debug_print)
     SerialEx.printf("load from EEPROM at address %d, got value %d\n", address, value);
   return value;
 }
 
-void store_to_eeprom(int address, unsigned char value)
+void eeprom_store(int address, unsigned char value)
 {
   if (!eeprom_ready)
     return;
-//  if (debug)
+  if (debug_print)
     SerialEx.printf("store to EEPROM at address %d value %d\n", address, value);
   eeprom_write(address, value);
 }
+
+void setup_eeprom(genie_display *display)
+{
+  bool en;
+
+  current_screen = eeprom_load(EEPROM_CURRENT_SCREEN, 0) % display->max_screen;
+  SerialEx.printf("current_screen = %d\n", current_screen);
+  set_widget(display, "Can poll", eeprom_load(EEPROM_CAN_POLL, 1));
+
+  en = eeprom_load(EEPROM_RSE_LEFT_EN, 0);
+  set_widget(display, "Left display", en);
+  rse_left_display_en(en);
+
+  en = eeprom_load(EEPROM_RSE_RIGHT_EN, 0);
+  set_widget(&my_display, "Right display", en);
+  rse_right_display_en(en);
+
+  en = eeprom_load(EEPROM_RTI_EN, 0);
+  rti_en(en);
+}
+
+///////////////////// RTI ////////////////////////////////
+// levels are inverted
+
+static DueTimer *rti_serial_timer = &Timer5;
+
+static unsigned char rti_bytes[] = { 0x40, 0x40, 0x83 };
+int rti_byte = 0;
+int rti_bit = 0;
+
+void rti_en(bool en)
+{
+  static bool last_state = false;
+  if (en == last_state)
+    return;
+  last_state = en;
+
+  eeprom_store(EEPROM_RTI_EN, en);
+
+  if (en) {
+    rti_byte = 0;
+    pinMode(RTI_PIN, OUTPUT);
+    digitalWrite(RTI_PIN, !HIGH);
+    delay(1);
+    rti_isr_send_start_bit();
+  } else {
+    rti_serial_timer->stop();
+  }
+}
+
+void rti_isr_send_start_bit()
+{
+  rti_bit = 0;
+  digitalWrite(RTI_PIN, !LOW); // start bit
+  rti_serial_timer->attachInterrupt(rti_isr_send_bit).setFrequency(2400).start(); // 2400 baud
+}
+
+void rti_isr_send_bit()
+{
+  unsigned char byte = rti_bytes[rti_byte];
+  bool bit = byte & (1 << rti_bit);
+
+  digitalWrite(RTI_PIN, !bit);
+  rti_bit++;
+  if (rti_bit == 8)
+    rti_serial_timer->attachInterrupt(rti_isr_send_stop_bit).setFrequency(2400).start();
+}
+
+void rti_isr_send_stop_bit()
+{
+  rti_byte = (rti_byte + 1) % (sizeof(rti_bytes));
+  digitalWrite(RTI_PIN, !HIGH);
+  rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(100000); // 100 ms between bytes
+}
+
+//////////////////////////////////////////////////////////
 
 void setup()
 {
@@ -1299,20 +1376,7 @@ void setup()
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
-
-  current_screen = load_from_eeprom(EEPROM_CURRENT_SCREEN, 0) % my_display.max_screen;
-  SerialEx.printf("current_screen = %d\n", current_screen);
-  set_widget(&my_display, "Can poll", load_from_eeprom(EEPROM_CAN_POLL, 1));
-
-  bool en;
-
-  en = load_from_eeprom(EEPROM_RSE_LEFT_EN, 0);
-  set_widget(&my_display, "Left display", en);
-  rse_left_display_en(en);
-
-  en = load_from_eeprom(EEPROM_RSE_RIGHT_EN, 0);
-  set_widget(&my_display, "Right display", en);
-  rse_right_display_en(en);
+  setup_eeprom(&my_display);
 }
 
 void loop()
