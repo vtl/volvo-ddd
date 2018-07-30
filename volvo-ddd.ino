@@ -27,7 +27,7 @@ float temp_c_to_f(float c)
 
 #define LCD_RESET_LINE 2
 #define LCD_RESET_DELAY 5500
-#define WDT_TIMEOUT (LCD_RESET_DELAY + 500)
+#define WDT_TIMEOUT 1500
 
 #define SWC_PIN     44
 #define RTI_PIN     42
@@ -418,7 +418,7 @@ void refresh_display(struct genie_display *display, int screen)
   }
   for (int i = 0; i < display->widget_count; i++) {
     if (display->widget[i].screen == display->current_screen) {
-      watchdogReset();
+//      watchdogReset();
       widget_update(&display->widget[i], force);
     }
   }
@@ -1370,13 +1370,13 @@ void setup()
   Serial.begin(115200);
   SerialEx.printf("start\n");
   SerialEx.printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
-  watchdogEnable(WDT_TIMEOUT);
   setup_car(&my_car);
   setup_eeprom();
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
   setup_eeprom(&my_display);
+  watchdogEnable(WDT_TIMEOUT);
 }
 
 void loop()
