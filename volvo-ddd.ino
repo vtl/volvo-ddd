@@ -197,7 +197,7 @@ typedef struct module {
   int last_sensor = 0;
   uint8_t sensor_count = 0;
   uint8_t rcv_data[256];
-  int rcv_idx = 0;
+  unsigned int rcv_idx = 0;
   sensor_t *rcv_sensor;
   sensor_t sensor[MAX_SENSORS_PER_MODULE];
 } module_t;
@@ -622,11 +622,32 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
   if (!sensor)
     return;
 
-  if (module->rcv_idx + len >= 256) {
+  if (module->rcv_idx + len >= sizeof(module->rcv_data)) {
     if (debug_print) {
-      SerialEx.printf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, 256);
-      goto out;
+      SerialEx.printf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, sizeof(module->rcv_data));
     }
+    goto out;
+  }
+
+  if (offset > 8) {
+    if (debug_print) {
+      SerialEx.printf("offset %d > 8\n", offset);
+    }
+    goto out;    
+  }
+
+  if (len < 0) {
+    if (debug_print) {
+      SerialEx.printf("len %d < 0\n", len);
+    }
+    goto out;    
+  }
+
+  if (offset > len) {
+    if (debug_print) {
+      SerialEx.printf("offset %d > len %d\n", offset, len);
+    }
+    goto out;
   }
 
   if (debug_print)
@@ -634,7 +655,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
   memcpy(module->rcv_data + module->rcv_idx, in->data.bytes + offset, len - offset); // FIXME how many bytes to skip?
   module->rcv_idx += len - offset;
 
-  if ((in->data.bytes[0] & 0x40) == 0) { // frame end
+  if ((in->data.bytes[0] & 0x40) == 0) { // not frame end
     return;
   }
 
@@ -659,13 +680,11 @@ out:
 
 void can_callback0(CAN_FRAME *in)
 {
-  unsigned char can_data[256];
   can_callback_multiframe((char *)"CAN HS", in);
 }
 
 void can_callback1(CAN_FRAME *in)
 {
-  unsigned char can_data[256];
   can_callback_multiframe((char *)"CAN LS", in);
 }
 
