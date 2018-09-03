@@ -722,9 +722,9 @@ void setup_car(struct car *car)
   car_init(car);
 
   pinMode(RSE_LEFT_DISPLAY_EN_PIN, OUTPUT);
-  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, HIGH);
+//  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, HIGH);
   pinMode(RSE_RIGHT_DISPLAY_EN_PIN, OUTPUT);
-  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, HIGH);
+//  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, HIGH);
 
   SerialEx.printf("setup %s... done\n", car->name);
 }
@@ -1168,8 +1168,9 @@ void display_event_callback(void)
 
 void rse_left_display_en(bool en)
 {
+  static bool inited = false;
   static bool last_state = false;
-  if (en == last_state)
+  if (inited && (en == last_state))
     return;
   last_state = en;
   SerialEx.printf("left display %d\n", en);
@@ -1179,8 +1180,9 @@ void rse_left_display_en(bool en)
 
 void rse_right_display_en(bool en)
 {
+  static bool inited = false;
   static bool last_state = false;
-  if (en == last_state)
+  if (inited && (en == last_state))
     return;
   last_state = en;
   SerialEx.printf("right display %d\n", en);
