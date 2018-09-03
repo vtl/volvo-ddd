@@ -390,7 +390,11 @@ void reset_genie(Genie *genie)
   delay(100);
   digitalWrite(LCD_RESET_LINE, HIGH);
 
-  delay(LCD_RESET_DELAY); //let the display start up after the reset (This is important)
+  for (int i = 0; i < LCD_RESET_DELAY / WDT_TIMEOUT; i++) {
+   watchdogReset();
+   delay(WDT_TIMEOUT); //let the display start up after the reset (This is important)
+  }
+
   SerialEx.printf("done\n");
 }
 
@@ -673,6 +677,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     sensor->module->ack_cb(sensor->module);
   if (sensor->module->car->ack_cb)
     sensor->module->car->ack_cb(sensor->module->car);
+  watchdogReset();
 out:
   module->rcv_sensor = NULL;
   module->rcv_idx = 0;
@@ -1076,7 +1081,7 @@ void radio_toggle_canbus()
   screen_arm_busy = true;
   screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
 
-  my_car.can_poll = !my_car.can_poll;
+  set_can_poll(&my_car, !my_car.can_poll);
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
 
   eeprom_store(EEPROM_CAN_POLL, my_car.can_poll);
@@ -1130,7 +1135,7 @@ void ccm_switch_status_cb(struct sensor *sensor)
   } else if (status && last_status) {   /* press and hold */
     if (!once && (millis() - last_pressed_time > 3000)) {
       once = true;
-      my_car.can_poll = !my_car.can_poll;
+      set_can_poll(&my_car, !my_car.can_poll);
       my_display.enabled = my_car.can_poll;
     }
   }
@@ -1256,8 +1261,10 @@ void event_can_poll(struct genie_widget *widget)
 }
 
 extern "C" void _watchdogEnable (void) {}
+extern "C" void _watchdogDisable (void) {}
 
 void watchdogSetup (void) __attribute__ ((weak, alias("_watchdogEnable")));
+void watchdogShutoff (void) __attribute__ ((weak, alias("_watchdogDisable")));
 
 int eeprom_ready = 0;
 
@@ -1308,13 +1315,25 @@ void eeprom_store(int address, unsigned char value)
   eeprom_write(address, value);
 }
 
+void set_can_poll(struct car *car, bool en)
+{
+    car->can_poll = en;
+    if (en)
+      watchdogSetup();
+    else
+      watchdogShutoff(); 
+}
+
 void setup_eeprom(genie_display *display)
 {
   bool en;
 
   current_screen = eeprom_load(EEPROM_CURRENT_SCREEN, 0) % display->max_screen;
   SerialEx.printf("current_screen = %d\n", current_screen);
-  set_widget(display, "Can poll", eeprom_load(EEPROM_CAN_POLL, 1));
+
+  en = eeprom_load(EEPROM_CAN_POLL, 1);
+  set_widget(display, "Can poll", en);
+  set_can_poll(display->car, en);
 
   en = eeprom_load(EEPROM_RSE_LEFT_EN, 0);
   set_widget(display, "Left display", en);
@@ -1325,6 +1344,7 @@ void setup_eeprom(genie_display *display)
   rse_right_display_en(en);
 
   en = eeprom_load(EEPROM_RTI_EN, 0);
+  set_widget(&my_display, "GPS navigation", en);
   rti_en(en);
 }
 
@@ -1389,19 +1409,19 @@ void setup()
   Serial.begin(115200);
   SerialEx.printf("start\n");
   SerialEx.printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
+//  watchdogEnable(WDT_TIMEOUT);
   setup_car(&my_car);
   setup_eeprom();
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
   setup_eeprom(&my_display);
-  watchdogEnable(WDT_TIMEOUT);
+//  watchdogReset();
 }
 
 void loop()
 {
   while (1) {
-    watchdogReset();
     query_all_sensors(&my_car);
     refresh_display(&my_display, current_screen);
   }
