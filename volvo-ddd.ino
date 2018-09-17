@@ -583,6 +583,7 @@ void can_callback(CAN_FRAME *in)
     sensor->module->ack_cb(sensor->module);
   if (sensor->module->car->ack_cb)
     sensor->module->car->ack_cb(sensor->module->car);
+  watchdogReset();
 }
 
 void can_callback_multiframe(char *msg, CAN_FRAME *in)
@@ -1083,8 +1084,6 @@ void radio_toggle_canbus()
 
   set_can_poll(&my_car, !my_car.can_poll);
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
-
-  eeprom_store(EEPROM_CAN_POLL, my_car.can_poll);
   set_widget(&my_display, "Can poll", my_car.can_poll);
 }
 
@@ -1257,8 +1256,7 @@ void event_can_poll(struct genie_widget *widget)
   SerialEx.printf("event CAN poll\n");
   
   if (widget->current_value != widget->display->car->can_poll) {
-    widget->display->car->can_poll = !!widget->current_value;
-    eeprom_store(EEPROM_CAN_POLL, widget->display->car->can_poll);
+    set_can_poll(widget->display->car, !!widget->current_value);
   }
 }
 
@@ -1319,11 +1317,14 @@ void eeprom_store(int address, unsigned char value)
 
 void set_can_poll(struct car *car, bool en)
 {
-    car->can_poll = en;
-    if (en)
-      watchdogSetup();
-    else
-      watchdogShutoff(); 
+  if (car->can_poll != en)
+    eeprom_store(EEPROM_CAN_POLL, en);
+
+  car->can_poll = en;
+  if (en) /* that works only once after CPU reset */
+    watchdogSetup();
+  else
+   watchdogShutoff(); 
 }
 
 void setup_eeprom(genie_display *display)
