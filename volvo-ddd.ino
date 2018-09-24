@@ -458,6 +458,19 @@ void genie_previous_screen()
   genie_change_screen(my_display.max_screen);
 }
 
+bool loop_now_update = true;
+long loop_now = 0; // timestamp of loop()
+
+void watchdog_reset() // should be called from interrupt handler
+{
+  long now = millis();
+
+  // make sure main loop is alive
+
+  if (now - loop_now < WDT_TIMEOUT)
+    watchdogReset();
+}
+
 void print_frame(const char *s, CAN_FRAME *in)
 {
   if (debug_print) {
@@ -579,7 +592,7 @@ void can_callback(CAN_FRAME *in)
     sensor->module->ack_cb(sensor->module);
   if (sensor->module->car->ack_cb)
     sensor->module->car->ack_cb(sensor->module->car);
-  watchdogReset();
+  watchdog_reset();
 }
 
 void can_callback_multiframe(char *msg, CAN_FRAME *in)
@@ -674,7 +687,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     sensor->module->ack_cb(sensor->module);
   if (sensor->module->car->ack_cb)
     sensor->module->car->ack_cb(sensor->module->car);
-  watchdogReset();
+  watchdog_reset();
 out:
   module->rcv_sensor = NULL;
   module->rcv_idx = 0;
@@ -722,6 +735,8 @@ void setup_car(struct car *car)
 //  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, HIGH);
   pinMode(RSE_RIGHT_DISPLAY_EN_PIN, OUTPUT);
 //  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, HIGH);
+
+  loop_now = millis();
 
   SerialEx.printf("setup %s... done\n", car->name);
 }
@@ -1034,7 +1049,7 @@ void setup_radio(struct radio *radio)
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
   DECLARE_RADIO_COMMAND("next screen",    &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
-  DECLARE_RADIO_COMMAND("toggle CAN-bus", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_toggle_canbus());
+  DECLARE_RADIO_COMMAND("toggle CAN-bus", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_killswitch());
 
   // Volvo: 1 - day, 0 - night
   // Kenwood: +12v - dimmer on
@@ -1080,6 +1095,11 @@ void radio_toggle_canbus()
   set_can_poll(&my_car, !my_car.can_poll);
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
   set_widget(&my_display, "Can poll", my_car.can_poll);
+}
+
+void radio_killswitch()
+{
+  loop_now_update = false; // watchdog will kill us shortly
 }
 
 void radio_event(struct radio *radio, int function, int param)
@@ -1429,6 +1449,8 @@ void setup()
 void loop()
 {
   while (1) {
+    if (loop_now_update)
+      loop_now = millis();
     query_all_sensors(&my_car);
     refresh_display(&my_display, current_screen);
   }
