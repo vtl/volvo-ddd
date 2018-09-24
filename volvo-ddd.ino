@@ -327,9 +327,6 @@ void widget_update(struct genie_widget *widget, bool force)
   if (!widget->display->enabled)
     return;
 
-//  if (widget->object_type == GENIE_OBJ_4DBUTTON)
-//    return;
-
   long new_value = widget->val_fn(widget);
 
   if (widget->object_type != GENIE_OBJ_STRING) {
@@ -422,7 +419,6 @@ void refresh_display(struct genie_display *display, int screen)
   }
   for (int i = 0; i < display->widget_count; i++) {
     if (display->widget[i].screen == display->current_screen) {
-//      watchdogReset();
       widget_update(&display->widget[i], force);
     }
   }
@@ -433,7 +429,7 @@ bool set_widget(struct genie_display *display, const char *name, long value)
   int i;
 
   for (i = 0; i < display->widget_count; i++) {
-    if (strcmp(display->widget[i].name, name) == 0) {
+    if (strncmp(display->widget[i].name, name, sizeof(display->widget[i].name)) == 0) {
       display->widget[i].current_value = value;
       break;
     }
@@ -638,14 +634,14 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     if (debug_print) {
       SerialEx.printf("offset %d > 8\n", offset);
     }
-    goto out;    
+    goto out;
   }
 
   if (len < 0) {
     if (debug_print) {
       SerialEx.printf("len %d < 0\n", len);
     }
-    goto out;    
+    goto out;
   }
 
   if (offset > len) {
@@ -987,7 +983,6 @@ void radio_isr_send_bit_finish()
 
   digitalWrite(radio->control_pin, !HIGH);
   if (radio->cur_bit == 50) {
-    //    radio->timer->attachInterrupt(radio_isr_stop).start(1000000);
     radio_isr_stop();
   } else
     radio->timer->attachInterrupt(radio_isr_send_bit).start(200 - N);
@@ -1038,8 +1033,8 @@ void setup_radio(struct radio *radio)
   DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0111, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
-  DECLARE_RADIO_COMMAND("next screen", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_toggle_canbus());
+  DECLARE_RADIO_COMMAND("next screen",    &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
+  DECLARE_RADIO_COMMAND("toggle CAN-bus", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_toggle_canbus());
 
   // Volvo: 1 - day, 0 - night
   // Kenwood: +12v - dimmer on
@@ -1160,7 +1155,7 @@ void display_event_callback(void)
           SerialEx.printf("input %s data %d\n", widget->name, widget->current_value);
         if (widget->cb_fn)
           widget->cb_fn(widget);
-      }          
+      }
     }
   }
 }
@@ -1254,7 +1249,7 @@ void event_transmission_adaptation(struct genie_widget *widget)
 void event_can_poll(struct genie_widget *widget)
 {
   SerialEx.printf("event CAN poll\n");
-  
+
   if (widget->current_value != widget->display->car->can_poll) {
     set_can_poll(widget->display->car, !!widget->current_value);
   }
@@ -1324,7 +1319,7 @@ void set_can_poll(struct car *car, bool en)
   if (en) /* that works only once after CPU reset */
     watchdogSetup();
   else
-   watchdogShutoff(); 
+   watchdogShutoff();
 }
 
 void setup_eeprom(genie_display *display)
@@ -1359,6 +1354,7 @@ static DueTimer *rti_serial_timer = &Timer5;
 static unsigned char rti_bytes[] = { 0x40, 0x40, 0x83 };
 int rti_byte = 0;
 int rti_bit = 0;
+bool rti_enabled = false;
 
 void rti_en(bool en)
 {
@@ -1371,17 +1367,21 @@ void rti_en(bool en)
 
   if (en) {
     rti_byte = 0;
+    rti_enabled = true;
     pinMode(RTI_PIN, OUTPUT);
     digitalWrite(RTI_PIN, !HIGH);
-    delay(1);
-    rti_isr_send_start_bit();
+    rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(1000); // 1 ms
   } else {
+    rti_enabled = false;
     rti_serial_timer->stop();
   }
 }
 
 void rti_isr_send_start_bit()
 {
+  if (!rti_enabled)
+    return;
+
   rti_bit = 0;
   digitalWrite(RTI_PIN, !LOW); // start bit
   rti_serial_timer->attachInterrupt(rti_isr_send_bit).setFrequency(2400).start(); // 2400 baud
@@ -1392,14 +1392,20 @@ void rti_isr_send_bit()
   unsigned char byte = rti_bytes[rti_byte];
   bool bit = byte & (1 << rti_bit);
 
+  if (!rti_enabled)
+    return;
+
   digitalWrite(RTI_PIN, !bit);
   rti_bit++;
-  if (rti_bit == 8)
+  if (rti_bit >= 8)
     rti_serial_timer->attachInterrupt(rti_isr_send_stop_bit).setFrequency(2400).start();
 }
 
 void rti_isr_send_stop_bit()
 {
+  if (!rti_enabled)
+    return;
+
   rti_byte = (rti_byte + 1) % (sizeof(rti_bytes));
   digitalWrite(RTI_PIN, !HIGH);
   rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(100000); // 100 ms between bytes
@@ -1412,14 +1418,12 @@ void setup()
   Serial.begin(115200);
   SerialEx.printf("start\n");
   SerialEx.printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
-//  watchdogEnable(WDT_TIMEOUT);
   setup_car(&my_car);
   setup_eeprom();
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
   setup_eeprom(&my_display);
-//  watchdogReset();
 }
 
 void loop()
