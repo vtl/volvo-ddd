@@ -1323,7 +1323,7 @@ void setup_eeprom(void)
 {
   unsigned char magic_0, magic_1;
 
-  eeprom_init(11, 12, 9, 8);
+  eeprom_init(7, 12, 9, 8);
   eeprom_ewen();
   for (int i = 0; i < 2; i++) {
     magic_0 = eeprom_read(0);
