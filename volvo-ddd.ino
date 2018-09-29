@@ -327,12 +327,15 @@ typedef struct genie_display {
 
 #define GENIE_OBJ_STRING (-1)
 
-void widget_update(struct genie_widget *widget, bool force)
+bool widget_update(struct genie_widget *widget, bool force)
 {
-  if (!widget->display->enabled)
-    return;
-
   long new_value = widget->val_fn(widget);
+
+  if (!widget->display->ready)
+    return true;
+
+  if (!widget->display->enabled)
+    return true;
 
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
@@ -357,10 +360,15 @@ void widget_update(struct genie_widget *widget, bool force)
     } else {
       widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
     }
+    widget->last_value = new_value;
+    
     if (debug_print)
       SerialEx.printf("widget %s update took %d ms\n", widget->name, millis() - ms);
-    widget->last_value = new_value;
+
+    if (millis() - ms > 500)
+      return false;
   }
+  return true;
 }
 
 #define DECLARE_WIDGET(_name, _display, _screen, _object_type, _object_index, _min, _max, _val_fn, _cb_fn) \
@@ -380,26 +388,25 @@ void widget_update(struct genie_widget *widget, bool force)
     widget->display->max_screen = max(widget->display->max_screen, _screen); \
   } while (0)
 
-void reset_genie(Genie *genie)
+void reset_display(struct genie_display *display)
 {
   SerialEx.printf("Resetting 4DSystems LCD... ");
-  genie->assignDebugPort(Serial);
   Serial2.begin(200000);
-  genie->Begin(Serial2);
-  genie->AttachEventHandler(display_event_callback);
+  display->genie.Begin(Serial2);
+  display->genie.AttachEventHandler(display_event_callback);
+  display->ready = false;
   pinMode(LCD_RESET_LINE, OUTPUT);
   digitalWrite(LCD_RESET_LINE, LOW);
   delay(100);
   digitalWrite(LCD_RESET_LINE, HIGH);
+  display->init_started_ms = millis();
 }
 
 void setup_genie_display(struct genie_display *display, struct car *car)
 {
   display->car = car;
   display->widget_count = 0;
-  display->ready = false;
-  display->init_started_ms = millis();
-  reset_genie(&display->genie);
+  reset_display(display);
 
 #include WIDGETS
 }
@@ -415,18 +422,32 @@ void refresh_display(struct genie_display *display, int screen)
       return;
   }
 
-  display->genie.DoEvents();
-  display->genie.WriteContrast(display->enabled);
+  if (!display->enabled)
+    return;
 
-  if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
-    SerialEx.printf("changing screen to %d\n", screen);
-    display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
-    display->current_screen = screen;
-    force = true;
+  if (display->ready) {
+    display->genie.DoEvents();
+    long ms = millis();
+    display->genie.WriteContrast(display->enabled);
+
+    if (millis() - ms > 500) {
+      reset_display(display);
+      goto do_widgets;
+    }
+
+    if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
+      SerialEx.printf("changing screen to %d\n", screen);
+      display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
+      display->current_screen = screen;
+      force = true;
+    }
   }
+do_widgets:
   for (int i = 0; i < display->widget_count; i++) {
     if (display->widget[i].screen == display->current_screen) {
-      widget_update(&display->widget[i], force);
+      if (!widget_update(&display->widget[i], force)) {
+            reset_display(display);
+      }
     }
   }
 }
