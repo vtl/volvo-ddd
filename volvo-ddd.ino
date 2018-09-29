@@ -6,14 +6,18 @@
    (c) 2016-2018 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
-int debug_print = 0;
+#include <PrintEx.h>
+
+int debug_print = 1;
+StreamEx SerialEx = Serial;//USB;
+
+#define NO_CAN
 
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
 #include <due_can.h>
 #include <genieArduino.h>
-#include <PrintEx.h>
 #include <DueTimer.h>
 #include <eeprom_93c86.h> // https://github.com/vtl/eeprom_93c86
 
@@ -48,7 +52,6 @@ float temp_c_to_f(float c)
 #define EEPROM_RTI_EN         20
 
 Genie genie;
-StreamEx SerialEx = Serial;//USB;
 
 #define CAN_HS Can0
 #define CAN_LS Can1
@@ -312,6 +315,8 @@ typedef struct genie_widget {
 
 typedef struct genie_display {
   Genie genie;
+  bool ready;
+  long init_started_ms;
   bool enabled = true;
   int current_screen = 0;
   int max_screen = 0;
@@ -386,19 +391,14 @@ void reset_genie(Genie *genie)
   digitalWrite(LCD_RESET_LINE, LOW);
   delay(100);
   digitalWrite(LCD_RESET_LINE, HIGH);
-
-  for (int i = 0; i < LCD_RESET_DELAY / WDT_TIMEOUT; i++) {
-   watchdogReset();
-   delay(WDT_TIMEOUT); //let the display start up after the reset (This is important)
-  }
-
-  SerialEx.printf("done\n");
 }
 
 void setup_genie_display(struct genie_display *display, struct car *car)
 {
   display->car = car;
   display->widget_count = 0;
+  display->ready = false;
+  display->init_started_ms = millis();
   reset_genie(&display->genie);
 
 #include WIDGETS
@@ -407,6 +407,13 @@ void setup_genie_display(struct genie_display *display, struct car *car)
 void refresh_display(struct genie_display *display, int screen)
 {
   bool force = false;
+
+  if (!display->ready) {
+    if (millis() - display->init_started_ms > LCD_RESET_DELAY)
+      display->ready = true;
+    else
+      return;
+  }
 
   display->genie.DoEvents();
   display->genie.WriteContrast(display->enabled);
@@ -1449,6 +1456,9 @@ void setup()
 void loop()
 {
   while (1) {
+#ifdef NO_CAN
+    watchdog_reset();
+#endif
     if (loop_now_update)
       loop_now = millis();
     query_all_sensors(&my_car);
