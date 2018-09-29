@@ -8,10 +8,10 @@
 
 #include <PrintEx.h>
 
-int debug_print = 1;
+int debug_print = 0;
 StreamEx SerialEx = Serial;//USB;
 
-#define NO_CAN
+//#define NO_CAN
 
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
@@ -391,7 +391,7 @@ bool widget_update(struct genie_widget *widget, bool force)
 
 void reset_display(struct genie_display *display)
 {
-  SerialEx.printf("Resetting 4DSystems LCD... ");
+  SerialEx.printf("Resetting 4DSystems LCD... \n");
   Serial2.begin(200000);
   display->genie.Begin(Serial2);
   display->genie.AttachEventHandler(display_event_callback);
