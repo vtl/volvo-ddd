@@ -5,11 +5,11 @@
 const char *get_tcm_gear_string(struct car *car)
 {
   int gear =
-    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S1_STATUS), 1 << 4) |
-    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S2_STATUS), 1 << 3) |
-    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S3_STATUS), 1 << 2) |
-    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S4_STATUS), 1 << 1) |
-    get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S5_STATUS), 1 << 0);
+    peek_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S1_STATUS), 1 << 4) |
+    peek_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S2_STATUS), 1 << 3) |
+    peek_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S3_STATUS), 1 << 2) |
+    peek_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S4_STATUS), 1 << 1) |
+    peek_sensor_value(find_module_sensor_by_id(car, TCM, TCM_S5_STATUS), 1 << 0);
 
   switch (gear) {
   case 0b00000:
@@ -101,7 +101,7 @@ void car_init(struct car * car)
                  ));
   DECLARE_SENSOR(car, TCM, TCM_GEAR_RATIO,           "Gear ratio",           ARRAY(0xa5, 0x93, 0x01),       VALUE_FLOAT, (sensor->value.v_float = ((256L * bytes[4] + bytes[5]) == 0xffff ? 0 : (256L * bytes[4] + bytes[5])) * 0.001));
   DECLARE_SENSOR(car, TCM, TCM_CURRENT_GEAR,         "Current gear",         ARRAY(0x01),                   VALUE_STRING, (sensor->value.v_string = (const char *)get_tcm_gear_string(sensor->module->car)));
-  DECLARE_SENSOR(car, TCM, TCM_GEARBOX_POSITION_S,   "Gearbox position",     ARRAY(0x01), VALUE_STRING, (sensor->value.v_string = get_gearbox_level_position_string(get_sensor_value(find_sensor_by_id(sensor->module, TCM_GEARBOX_POSITION), 1))));
+  DECLARE_SENSOR(car, TCM, TCM_GEARBOX_POSITION_S,   "Gearbox position S",   ARRAY(0x01), VALUE_STRING, (sensor->value.v_string = get_gearbox_level_position_string(peek_sensor_value(find_sensor_by_id(sensor->module, TCM_GEARBOX_POSITION), 1))));
   DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, (0));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////

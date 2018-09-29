@@ -329,7 +329,7 @@ typedef struct genie_display {
 
 bool widget_update(struct genie_widget *widget, bool force)
 {
-  long new_value = widget->val_fn(widget);
+  long new_value;
 
   if (!widget->display->ready)
     return true;
@@ -337,6 +337,7 @@ bool widget_update(struct genie_widget *widget, bool force)
   if (!widget->display->enabled)
     return true;
 
+  new_value = widget->val_fn(widget);
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
       if (debug_print)
@@ -901,17 +902,24 @@ void query_all_sensors(struct car *car)
   get_sensor_value(find_module_sensor_by_id(car, CCM, CCM_SWITCH_STATUS), 1); // FIXME no widgets need it, so keep it alive
 }
 
-long get_sensor_value(struct sensor *sensor, float multiplier)
+long peek_sensor_value(struct sensor *sensor, float multiplier)
 {
   if (!sensor)
     return 0;
-  sensor->last_used = millis();
   if (sensor->value_type == VALUE_INT)
     return sensor->value.v_int * multiplier;
   else if (sensor->value_type == VALUE_FLOAT)
     return (int)round(sensor->value.v_float * multiplier);
   else
     return (long)sensor->value.v_string;
+}
+
+long get_sensor_value(struct sensor *sensor, float multiplier)
+{
+  if (!sensor)
+    return 0;
+  sensor->last_used = millis();
+  return peek_sensor_value(sensor, multiplier);
 }
 
 long get_sensor_abs_value(struct sensor *sensor, float multiplier)
