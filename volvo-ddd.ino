@@ -949,6 +949,8 @@ enum {
   RADIO_EVENT_GEARBOX
 };
 
+#define RADIO_EVENT_FIRST_REPEAT_DELAY_MS 1000 // delay between first event and following
+
 struct radio;
 
 struct radio_command {
@@ -969,6 +971,9 @@ typedef struct radio {
   int illumi_pin;
   int park_pin;
   int camera_pin;
+  struct radio_command *last_command;
+  long last_command_ms;
+  long command_sequence;
   DueTimer *timer;
   bool busy;
   int cur_bit;
@@ -995,6 +1000,13 @@ struct radio my_radio;
     radio->commands++; \
   } while (0)
 
+void radio_set_keypress_delay(struct radio *radio)
+{
+  radio->last_command = NULL;
+  radio->command_sequence = 0;
+  radio->last_command_ms = 0;  
+}
+
 #define N 100
 
 void radio_send_bits(struct radio_command *command, const uint8_t bits[])
@@ -1003,6 +1015,20 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
 
   if (radio->busy)
     return;
+
+  if (command == radio->last_command)
+    radio->command_sequence++;
+  else
+    radio_set_keypress_delay(radio);
+
+// delay after first event in a sequence
+  if ((millis() - radio->last_command_ms < RADIO_EVENT_FIRST_REPEAT_DELAY_MS))
+    return;
+
+  radio->last_command = command;
+  if (radio->command_sequence == 0)
+    radio->last_command_ms = millis();
+  
   memcpy(radio->data, (const uint8_t[]) {
     0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0
   }, 25);
@@ -1087,7 +1113,8 @@ void setup_radio(struct radio *radio)
   }));
   DECLARE_RADIO_COMMAND("next screen",    &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
   DECLARE_RADIO_COMMAND("toggle CAN-bus", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_killswitch());
-
+  DECLARE_RADIO_COMMAND("rearm keypress delay",  &my_radio, RADIO_EVENT_SWC,  EVENT_HIT(0b1111, 0b1111), radio_set_keypress_delay(command->radio));
+ 
   // Volvo: 1 - day, 0 - night
   // Kenwood: +12v - dimmer on
   // ULN2003A or NPN transistor reverse value (0 - +12v, 1 - 0v)
