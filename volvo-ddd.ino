@@ -396,6 +396,7 @@ void reset_display(struct genie_display *display)
   display->genie.Begin(Serial2);
   display->genie.AttachEventHandler(display_event_callback);
   display->ready = false;
+  display->current_screen = 0;
   pinMode(LCD_RESET_LINE, OUTPUT);
   digitalWrite(LCD_RESET_LINE, LOW);
   delay(100);
