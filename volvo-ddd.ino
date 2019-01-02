@@ -416,6 +416,7 @@ void setup_genie_display(struct genie_display *display, struct car *car)
 void refresh_display(struct genie_display *display, int screen)
 {
   bool force = false;
+  static bool display_off_once = false;
 
   if (!display->ready) {
     if (millis() - display->init_started_ms > LCD_RESET_DELAY)
@@ -424,8 +425,13 @@ void refresh_display(struct genie_display *display, int screen)
       return;
   }
 
-  if (!display->enabled)
+  if (!display->enabled) {
+    if (!display_off_once) {
+          display->genie.WriteContrast(display->enabled);
+          display_off_once = true;
+    }
     return;
+  }
 
   if (display->ready) {
     display->genie.DoEvents();
