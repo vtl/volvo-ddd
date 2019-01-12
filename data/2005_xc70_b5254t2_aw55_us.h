@@ -37,7 +37,7 @@ const char *get_gearbox_level_position_string(int gear)
   return gear_string[gear & 0b11];
 }
 
-void car_init(struct car * car)
+void car_init(struct car *car)
 {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -102,7 +102,7 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, TCM, TCM_GEAR_RATIO,           "Gear ratio",           ARRAY(0xa5, 0x93, 0x01),       VALUE_FLOAT, (sensor->value.v_float = ((256L * bytes[4] + bytes[5]) == 0xffff ? 0 : (256L * bytes[4] + bytes[5])) * 0.001));
   DECLARE_SENSOR(car, TCM, TCM_CURRENT_GEAR,         "Current gear",         ARRAY(0x01),                   VALUE_STRING, (sensor->value.v_string = (const char *)get_tcm_gear_string(sensor->module->car)));
   DECLARE_SENSOR(car, TCM, TCM_GEARBOX_POSITION_S,   "Gearbox position S",   ARRAY(0x01), VALUE_STRING, (sensor->value.v_string = get_gearbox_level_position_string(peek_sensor_value(find_sensor_by_id(sensor->module, TCM_GEARBOX_POSITION), 1))));
-  DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, (0));
+  DECLARE_SENSOR(car, TCM, TCM_TORQUE_REDUCTION,     "Torque reduction",     ARRAY(0x00),                   VALUE_INT, ((void)sensor));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -120,10 +120,10 @@ void car_init(struct car * car)
                  (find_sensor_by_id(sensor->module, DEM_FRONT_RIGHT_SPEED))->value.v_float = (uint16_t)(256 * bytes[ 8] + bytes[ 9]) * 0.0156,
                  (find_sensor_by_id(sensor->module, DEM_REAR_LEFT_SPEED))->value.v_float   = (uint16_t)(256 * bytes[10] + bytes[11]) * 0.0156,
                  (find_sensor_by_id(sensor->module, DEM_REAR_RIGHT_SPEED))->value.v_float  = (uint16_t)(256 * bytes[12] + bytes[13]) * 0.0156));
-  DECLARE_SENSOR(car, DEM, DEM_FRONT_RIGHT_SPEED,    "FR velocity",          ARRAY(0x00),                   VALUE_FLOAT, (0));
-  DECLARE_SENSOR(car, DEM, DEM_REAR_LEFT_SPEED,      "RL velocity",          ARRAY(0x00),                   VALUE_FLOAT, (0));
-  DECLARE_SENSOR(car, DEM, DEM_REAR_RIGHT_SPEED,     "RR velocity",          ARRAY(0x00),                   VALUE_FLOAT, (0));
-  DECLARE_SENSOR(car, DEM, DEM_SOLENOID_CURRENT,     "Solenoid current",     ARRAY(0x00),                   VALUE_INT, (0));
+  DECLARE_SENSOR(car, DEM, DEM_FRONT_RIGHT_SPEED,    "FR velocity",          ARRAY(0x00),                   VALUE_FLOAT, ((void)sensor));
+  DECLARE_SENSOR(car, DEM, DEM_REAR_LEFT_SPEED,      "RL velocity",          ARRAY(0x00),                   VALUE_FLOAT, ((void)sensor));
+  DECLARE_SENSOR(car, DEM, DEM_REAR_RIGHT_SPEED,     "RR velocity",          ARRAY(0x00),                   VALUE_FLOAT, ((void)sensor));
+  DECLARE_SENSOR(car, DEM, DEM_SOLENOID_CURRENT,     "Solenoid current",     ARRAY(0x00),                   VALUE_INT, ((void)sensor));
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

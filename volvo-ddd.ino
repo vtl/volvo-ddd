@@ -3,23 +3,18 @@
 
    A car junkie display :)
 
-   (c) 2016-2018 Vitaly Mayatskikh <vitaly@gravicappa.info>
+   (c) 2016-2019 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
-#include <PrintEx.h>
-
-int debug_print = 0;
-StreamEx SerialEx = Serial;//USB;
-
-//#define NO_CAN
+int debug_print = 1;
 
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
-#include <due_can.h>
 #include <genieArduino.h>
-#include <DueTimer.h>
-#include <eeprom_93c86.h> // https://github.com/vtl/eeprom_93c86
+#include <Preferences.h>
+#include "esp32/can.h"
+#include "esp32/eeprom.h"
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -43,18 +38,7 @@ float temp_c_to_f(float c)
 #define RSE_LEFT_DISPLAY_EN_PIN  45
 #define RSE_RIGHT_DISPLAY_EN_PIN 43
 
-#define EEPROM_MAGIC_0      0xAA
-#define EEPROM_MAGIC_1      0x55
-#define EEPROM_CURRENT_SCREEN 16
-#define EEPROM_CAN_POLL       17
-#define EEPROM_RSE_LEFT_EN    18
-#define EEPROM_RSE_RIGHT_EN   19
-#define EEPROM_RTI_EN         20
-
 Genie genie;
-
-#define CAN_HS Can0
-#define CAN_LS Can1
 
 /*
    known modules
@@ -157,8 +141,8 @@ enum {
   MULTIFRAME
 };
 
-struct sensor;
 struct module;
+struct sensor;
 
 typedef struct sensor {
   uint8_t id;
@@ -238,7 +222,7 @@ typedef struct car {
   do { \
     struct module *module = &_car->module[_car->module_count]; \
     assert(_car->module_count < MAX_MODULES_PER_CAR); \
-    module->id = _id;	\
+    module->id = _id;  \
     module->car = _car; \
     module->name = _name; \
     module->req_id = _req_id; \
@@ -341,22 +325,22 @@ bool widget_update(struct genie_widget *widget, bool force)
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
       if (debug_print)
-        SerialEx.printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
+        printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
       new_value = widget->min_value;
     } else if (new_value > widget->max_value) {
       if (debug_print)
-        SerialEx.printf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
+        printf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
       new_value = widget->max_value;
     }
   }
   if (force || new_value != widget->last_value) {
     if (debug_print)
-      SerialEx.printf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
+      printf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
     long ms = millis();
 
     if (widget->object_type == GENIE_OBJ_STRING) {
       if (debug_print)
-        SerialEx.printf("string %d == '%s'\n", widget->object_index, (char *)new_value);
+        printf("string %d == '%s'\n", widget->object_index, (char *)new_value);
       widget->display->genie.WriteStr(widget->object_index, (char *)new_value);
     } else {
       widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
@@ -364,7 +348,7 @@ bool widget_update(struct genie_widget *widget, bool force)
     widget->last_value = new_value;
     
     if (debug_print)
-      SerialEx.printf("widget %s update took %d ms\n", widget->name, millis() - ms);
+      printf("widget %s update took %d ms\n", widget->name, millis() - ms);
 
     if (millis() - ms > 500)
       return false;
@@ -383,15 +367,15 @@ bool widget_update(struct genie_widget *widget, bool force)
     widget->object_index = _object_index; \
     widget->min_value = _min; \
     widget->max_value = _max; \
-    widget->val_fn = [](struct genie_widget *widget)->long { struct car *car = widget->display->car; return (_val_fn); }; \
-    widget->cb_fn = [](struct genie_widget *widget)->void { struct car *car = widget->display->car; return (_cb_fn); }; \
+    widget->val_fn = [](struct genie_widget *widget)->long { struct car *car __attribute__((unused)) = widget->display->car; return (_val_fn); }; \
+    widget->cb_fn = [](struct genie_widget *widget)->void { struct car *car __attribute__((unused)) = widget->display->car; return (_cb_fn); }; \
     widget->display->widget_count++;       \
     widget->display->max_screen = max(widget->display->max_screen, _screen); \
   } while (0)
 
 void reset_display(struct genie_display *display)
 {
-  SerialEx.printf("Resetting 4DSystems LCD... \n");
+  printf("Resetting 4DSystems LCD... \n");
   Serial2.begin(200000);
   display->genie.Begin(Serial2);
   display->genie.AttachEventHandler(display_event_callback);
@@ -438,7 +422,7 @@ void refresh_display(struct genie_display *display, int screen)
     }
 
     if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
-      SerialEx.printf("changing screen to %d\n", screen);
+      printf("changing screen to %d\n", screen);
       display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
       display->current_screen = screen;
       force = true;
@@ -459,7 +443,7 @@ bool set_widget(struct genie_display *display, const char *name, long value)
   int i;
 
   for (i = 0; i < display->widget_count; i++) {
-    if (strncmp(display->widget[i].name, name, sizeof(display->widget[i].name)) == 0) {
+    if (strcmp(display->widget[i].name, name) == 0) {
       display->widget[i].current_value = value;
       break;
     }
@@ -493,21 +477,24 @@ long loop_now = 0; // timestamp of loop()
 
 void watchdog_reset() // should be called from interrupt handler
 {
+#if 0
   long now = millis();
 
   // make sure main loop is alive
 
   if (now - loop_now < WDT_TIMEOUT)
     watchdogReset();
+#endif
 }
+
 
 void print_frame(const char *s, CAN_FRAME *in)
 {
   if (debug_print) {
-    SerialEx.printf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
+    printf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
     for (int i = 0; i < 8; i++)
-      SerialEx.printf("0x%02x ", in->data.byte[i]);
-    SerialEx.printf("\n");
+      printf("0x%02x ", in->data.byte[i]);
+    printf("\n");
   }
 }
 
@@ -515,8 +502,8 @@ void dump_array(const unsigned char *p, int len)
 {
   if (debug_print) {
     for (int i = 0; i < len; i++)
-      SerialEx.printf("0x%02x ", p[i]);
-    SerialEx.printf("\n");
+      printf("0x%02x ", p[i]);
+    printf("\n");
   }
 }
 
@@ -547,7 +534,7 @@ struct module *find_module_by_id(struct car *car, int module_id)
     if (car->module[m].id == module_id)
       return &car->module[m];
   if (debug_print)
-    SerialEx.printf("can't find module by id %d\n", module_id);
+    printf("can't find module by id %d\n", module_id);
 
   return NULL;
 }
@@ -558,7 +545,7 @@ struct module *find_module_by_can_id(struct car *car, unsigned long can_id)
     if (car->module[m].can_id == can_id)
       return &car->module[m];
   if (debug_print)
-    SerialEx.printf("can't find module by can_id %d\n", can_id);
+    printf("can't find module by can_id %d\n", can_id);
 
   return NULL;
 }
@@ -571,7 +558,7 @@ struct sensor *find_sensor_by_id(struct module *module, int sensor_id)
     if (module->sensor[s].id == sensor_id)
       return &module->sensor[s];
   if (debug_print)
-    SerialEx.printf("%s can't find sensor by id %d\n", module->name, sensor_id);
+    printf("%s can't find sensor by id %d\n", module->name, sensor_id);
 
   return NULL;
 }
@@ -612,7 +599,7 @@ void can_callback(CAN_FRAME *in)
 
   print_frame("CAN frame", in);
   if (debug_print)
-    SerialEx.printf("got sensor %s:%s\n", sensor->module->name, sensor->name);
+    printf("got sensor %s:%s\n", sensor->module->name, sensor->name);
 
   if (sensor->convert_fn)
     sensor->convert_fn(sensor, in->data.bytes, in->length);
@@ -653,7 +640,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     len = in->length; // copy everything
   } else {
       offset = 1; // skip flags and len
-      len = in->data.bytes[0] & 0x0f - 8;
+      len = (in->data.bytes[0] & 0x0f) - 8;
   }
 
   module = find_module_by_can_id(&my_car, in->id);
@@ -668,34 +655,34 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
 
   if (module->rcv_idx + len >= sizeof(module->rcv_data)) {
     if (debug_print) {
-      SerialEx.printf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, sizeof(module->rcv_data));
+      printf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, sizeof(module->rcv_data));
     }
     goto out;
   }
 
   if (offset > 8) {
     if (debug_print) {
-      SerialEx.printf("offset %d > 8\n", offset);
+      printf("offset %d > 8\n", offset);
     }
     goto out;
   }
 
   if (len < 0) {
     if (debug_print) {
-      SerialEx.printf("len %d < 0\n", len);
+      printf("len %d < 0\n", len);
     }
     goto out;
   }
 
   if (offset > len) {
     if (debug_print) {
-      SerialEx.printf("offset %d > len %d\n", offset, len);
+      printf("offset %d > len %d\n", offset, len);
     }
     goto out;
   }
 
   if (debug_print)
-    SerialEx.printf("idx %d, len %d\n", module->rcv_idx, len);
+    printf("idx %d, len %d\n", module->rcv_idx, len);
   memcpy(module->rcv_data + module->rcv_idx, in->data.bytes + offset, len - offset); // FIXME how many bytes to skip?
   module->rcv_idx += len - offset;
 
@@ -704,7 +691,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
   }
 
   if (debug_print)
-    SerialEx.printf("got sensor %s\n", sensor->name);
+    printf("got sensor %s\n", sensor->name);
 
   if (debug_print)
     dump_array(module->rcv_data, module->rcv_idx);
@@ -738,21 +725,26 @@ void setup_canbus(struct car *car)
   module_t *module;
   int i;
 
-  SerialEx.printf("setup CAN-bus...\n");
+  printf("setup CAN-bus...\n");
 
-  car->can_hs_ok = Can0.begin(car->can_hs_rate);
-  car->can_ls_ok = Can1.begin(car->can_ls_rate);
+  CAN_HS.cs_pin = 10;
+  CAN_HS.int_pin = 11;
+  CAN_LS.cs_pin = 12;
+  CAN_LS.int_pin = 13;
+
+  car->can_hs_ok = CAN_HS.begin(car->can_hs_rate);
+  car->can_ls_ok = CAN_LS.begin(car->can_ls_rate);
 
   for (i = 0; i < car->module_count; i++) {
     module = &car->module[i];
     module->canbus->setRXFilter(module->can_id, 0x1fffff, true);
   }
 
-  Can0.setGeneralCallback(can_callback0);
-  Can1.setGeneralCallback(can_callback1);
+//  CAN_HS.setGeneralCallback(can_callback0);
+//  CAN_LS.setGeneralCallback(can_callback1);
 
-  SerialEx.printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
-  SerialEx.printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
+  printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
+  printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
 }
 
 #include CAR
@@ -768,7 +760,7 @@ void setup_car(struct car *car)
 
   loop_now = millis();
 
-  SerialEx.printf("setup %s... done\n", car->name);
+  printf("setup %s... done\n", car->name);
 }
 
 void query_sensor(struct sensor *sensor)
@@ -776,7 +768,7 @@ void query_sensor(struct sensor *sensor)
   CAN_FRAME out;
 
   if (debug_print)
-    SerialEx.printf("query %s:%s\n", sensor->module->name, sensor->name);
+    printf("query %s:%s\n", sensor->module->name, sensor->name);
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -974,7 +966,7 @@ typedef struct radio {
   struct radio_command *last_command;
   long last_command_ms;
   long command_sequence;
-  DueTimer *timer;
+// FIXME  DueTimer *timer;
   bool busy;
   int cur_bit;
   uint8_t data[49];
@@ -1037,14 +1029,14 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
   radio->cur_bit = 0;
   pinMode(radio->control_pin, OUTPUT);
   digitalWrite(radio->control_pin, !LOW);
-  radio->timer->attachInterrupt(radio_isr_send_start).start(10000 - N);
+// FIXME  radio->timer->attachInterrupt(radio_isr_send_start).start(10000 - N);
 }
 
 void radio_isr_send_start()
 {
   struct radio *radio = &my_radio;
   digitalWrite(radio->control_pin, !HIGH);
-  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500 - N);
+// FIXME  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500 - N);
 }
 
 void radio_isr_send_bit()
@@ -1052,7 +1044,7 @@ void radio_isr_send_bit()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !radio->data[radio->cur_bit++]);
-  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000 - N);
+// FIXME  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000 - N);
 }
 
 void radio_isr_send_bit_finish()
@@ -1060,23 +1052,24 @@ void radio_isr_send_bit_finish()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !HIGH);
-  if (radio->cur_bit == 50) {
-    radio_isr_stop();
-  } else
-    radio->timer->attachInterrupt(radio_isr_send_bit).start(200 - N);
+// FIXME
+//  if (radio->cur_bit == 50) {
+//    radio_isr_stop();
+//  } else
+//    radio->timer->attachInterrupt(radio_isr_send_bit).start(200 - N);
 }
 
 void radio_isr_stop()
 {
   struct radio *radio = &my_radio;
 
-  radio->timer->stop();
+// FIXME  radio->timer->stop();
   radio->busy = false;
 }
 
 void setup_radio(struct radio *radio)
 {
-  radio->timer = &Timer6;
+// FIXME  radio->timer = &Timer6;
   radio->busy = false;
   radio->commands = 0;
   radio->control_pin = SWC_PIN;
@@ -1130,7 +1123,7 @@ void setup_radio(struct radio *radio)
 }
 
 static int screen_arm_busy = false;
-static DueTimer *screen_arm_timer = &Timer7;
+// FIXME static DueTimer *screen_arm_timer = &Timer7;
 
 void radio_arm_next_screen()
 {
@@ -1138,13 +1131,13 @@ void radio_arm_next_screen()
     return;
 
   screen_arm_busy = true;
-  screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
+//  screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
   genie_next_screen();
 }
 
 void radio_unarm_delay()
 {
-  screen_arm_timer->stop();
+//  screen_arm_timer->stop();
   screen_arm_busy = false;
 }
 
@@ -1154,7 +1147,7 @@ void radio_toggle_canbus()
     return;
 
   screen_arm_busy = true;
-  screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
+//  screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
 
   set_can_poll(&my_car, !my_car.can_poll);
   my_display.enabled = my_car.can_poll; // turn off display if can't poll
@@ -1172,7 +1165,7 @@ void radio_event(struct radio *radio, int function, int param)
     struct radio_command *command = &radio->command[i];
     if ((command->function == function) && command->match_fn(param)) {
       if (debug_print)
-        SerialEx.printf("key pressed: %s\n", command->name);
+        printf("key pressed: %s\n", command->name);
       command->fn(command);
     }
   }
@@ -1236,7 +1229,7 @@ void display_event_callback(void)
         widget->current_value = display->genie.GetEventData(&Event);
 
         //if (debug_print)
-          SerialEx.printf("input %s data %d\n", widget->name, widget->current_value);
+          printf("input %s data %d\n", widget->name, widget->current_value);
         if (widget->cb_fn)
           widget->cb_fn(widget);
       }
@@ -1251,7 +1244,7 @@ void rse_left_display_en(bool en)
   if (inited && (en == last_state))
     return;
   last_state = en;
-  SerialEx.printf("left display %d\n", en);
+  printf("left display %d\n", en);
   digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !en);
   eeprom_store(EEPROM_RSE_LEFT_EN, en);
 }
@@ -1263,26 +1256,26 @@ void rse_right_display_en(bool en)
   if (inited && (en == last_state))
     return;
   last_state = en;
-  SerialEx.printf("right display %d\n", en);
+  printf("right display %d\n", en);
   digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !en);
   eeprom_store(EEPROM_RSE_RIGHT_EN, en);
 }
 
 void event_gps_navigation(struct genie_widget *widget)
 {
-  SerialEx.printf("event GPS nav\n");
+  printf("event GPS nav\n");
   rti_en(widget->current_value);
 }
 
 void event_left_display(struct genie_widget *widget)
 {
-  SerialEx.printf("event left display\n");
+  printf("event left display\n");
   rse_left_display_en(widget->current_value);
 }
 
 void event_right_display(struct genie_widget *widget)
 {
-  SerialEx.printf("event right display\n");
+  printf("event right display\n");
   rse_right_display_en(widget->current_value);
 }
 
@@ -1291,7 +1284,7 @@ void event_sri_reset(struct genie_widget *widget)
   CAN_FRAME out;
 
 //  if (debug_print)
-    SerialEx.printf("SRI reset\n");
+    printf("SRI reset\n");
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -1313,7 +1306,7 @@ void event_transmission_adaptation(struct genie_widget *widget)
   CAN_FRAME out;
 
 //  if (debug_print)
-    SerialEx.printf("Transmission adaptation\n");
+    printf("Transmission adaptation\n");
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -1332,66 +1325,11 @@ void event_transmission_adaptation(struct genie_widget *widget)
 
 void event_can_poll(struct genie_widget *widget)
 {
-  SerialEx.printf("event CAN poll\n");
+  printf("event CAN poll\n");
 
   if (widget->current_value != widget->display->car->can_poll) {
     set_can_poll(widget->display->car, !!widget->current_value);
   }
-}
-
-extern "C" void _watchdogEnable (void) {}
-extern "C" void _watchdogDisable (void) {}
-
-void watchdogSetup (void) __attribute__ ((weak, alias("_watchdogEnable")));
-void watchdogShutoff (void) __attribute__ ((weak, alias("_watchdogDisable")));
-
-int eeprom_ready = 0;
-
-void setup_eeprom(void)
-{
-  unsigned char magic_0, magic_1;
-
-  eeprom_init(7, 12, 9, 8);
-  eeprom_ewen();
-  for (int i = 0; i < 2; i++) {
-    magic_0 = eeprom_read(0);
-    magic_1 = eeprom_read(1);
-    SerialEx.printf("[%d] EEPROM magic_0 = 0x%02x\n", i, magic_0);
-    SerialEx.printf("[%d] EEPROM magic_1 = 0x%02x\n", i, magic_1);
-    if ((magic_0 == EEPROM_MAGIC_0) &&
-        (magic_1 == EEPROM_MAGIC_1)) {
-        eeprom_ready = 1;
-        break;
-    } else { // try to init EEPROM
-       eeprom_write(0, EEPROM_MAGIC_0);
-       eeprom_write(1, EEPROM_MAGIC_1);
-    }
-  }
-  if (eeprom_ready)
-    SerialEx.printf("EEPROM OK\n");
-  else
-    SerialEx.printf("EEPROM was not found\n");
-}
-
-unsigned char eeprom_load(int address, unsigned char def)
-{
-  unsigned char value;
-
-  if (!eeprom_ready)
-    return def;
-  value = eeprom_read(address);
-  if (debug_print)
-    SerialEx.printf("load from EEPROM at address %d, got value %d\n", address, value);
-  return value;
-}
-
-void eeprom_store(int address, unsigned char value)
-{
-  if (!eeprom_ready)
-    return;
-  if (debug_print)
-    SerialEx.printf("store to EEPROM at address %d value %d\n", address, value);
-  eeprom_write(address, value);
 }
 
 void set_can_poll(struct car *car, bool en)
@@ -1400,40 +1338,18 @@ void set_can_poll(struct car *car, bool en)
     eeprom_store(EEPROM_CAN_POLL, en);
 
   car->can_poll = en;
-  if (en) /* that works only once after CPU reset */
-    watchdogSetup();
-  else
-   watchdogShutoff();
-}
-
-void setup_eeprom(genie_display *display)
-{
-  bool en;
-
-  current_screen = eeprom_load(EEPROM_CURRENT_SCREEN, 0) % display->max_screen;
-  SerialEx.printf("current_screen = %d\n", current_screen);
-
-  en = eeprom_load(EEPROM_CAN_POLL, 1);
-  set_widget(display, "Can poll", en);
-  set_can_poll(display->car, en);
-
-  en = eeprom_load(EEPROM_RSE_LEFT_EN, 0);
-  set_widget(display, "Left display", en);
-  rse_left_display_en(en);
-
-  en = eeprom_load(EEPROM_RSE_RIGHT_EN, 0);
-  set_widget(&my_display, "Right display", en);
-  rse_right_display_en(en);
-
-  en = eeprom_load(EEPROM_RTI_EN, 0);
-  set_widget(&my_display, "GPS navigation", en);
-  rti_en(en);
+// FIXME
+//  if (en) /* that works only once after CPU reset */
+//    watchdogSetup();
+//  else
+//   watchdogShutoff();
 }
 
 ///////////////////// RTI ////////////////////////////////
 // levels are inverted
 
-static DueTimer *rti_serial_timer = &Timer5;
+// FIXME
+//static DueTimer *rti_serial_timer = &Timer5;
 
 static unsigned char rti_bytes[] = { 0x40, 0x40, 0x83 };
 int rti_byte = 0;
@@ -1454,10 +1370,10 @@ void rti_en(bool en)
     rti_enabled = true;
     pinMode(RTI_PIN, OUTPUT);
     digitalWrite(RTI_PIN, !HIGH);
-    rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(1000); // 1 ms
+//    rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(1000); // 1 ms
   } else {
     rti_enabled = false;
-    rti_serial_timer->stop();
+//    rti_serial_timer->stop();
   }
 }
 
@@ -1468,7 +1384,7 @@ void rti_isr_send_start_bit()
 
   rti_bit = 0;
   digitalWrite(RTI_PIN, !LOW); // start bit
-  rti_serial_timer->attachInterrupt(rti_isr_send_bit).setFrequency(2400).start(); // 2400 baud
+//  rti_serial_timer->attachInterrupt(rti_isr_send_bit).setFrequency(2400).start(); // 2400 baud
 }
 
 void rti_isr_send_bit()
@@ -1481,8 +1397,8 @@ void rti_isr_send_bit()
 
   digitalWrite(RTI_PIN, !bit);
   rti_bit++;
-  if (rti_bit >= 8)
-    rti_serial_timer->attachInterrupt(rti_isr_send_stop_bit).setFrequency(2400).start();
+//  if (rti_bit >= 8)
+//    rti_serial_timer->attachInterrupt(rti_isr_send_stop_bit).setFrequency(2400).start();
 }
 
 void rti_isr_send_stop_bit()
@@ -1492,18 +1408,45 @@ void rti_isr_send_stop_bit()
 
   rti_byte = (rti_byte + 1) % (sizeof(rti_bytes));
   digitalWrite(RTI_PIN, !HIGH);
-  rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(100000); // 100 ms between bytes
+//  rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(100000); // 100 ms between bytes
 }
 
 //////////////////////////////////////////////////////////
 
+void setup_eeprom(genie_display *display)
+{
+  bool en;
+
+  eeprom_init();
+
+  current_screen = eeprom_load(EEPROM_CURRENT_SCREEN, 0) % display->max_screen;
+  printf("current_screen = %d\n", current_screen);
+
+  en = eeprom_load(EEPROM_CAN_POLL, 1);
+  set_widget(display, "Can poll", en);
+  set_can_poll(display->car, en);
+
+  en = eeprom_load(EEPROM_RSE_LEFT_EN, 0);
+  set_widget(display, "Left display", en);
+  rse_left_display_en(en);
+  
+  en = eeprom_load(EEPROM_RSE_RIGHT_EN, 0);
+  set_widget(&my_display, "Right display", en);
+  rse_right_display_en(en);
+
+  en = eeprom_load(EEPROM_RTI_EN, 0);
+  set_widget(&my_display, "GPS navigation", en);
+  rti_en(en);
+
+}
+
 void setup()
 {
   Serial.begin(115200);
-  SerialEx.printf("start\n");
-  SerialEx.printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
+  printf("start\n");
+  printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
+  
   setup_car(&my_car);
-  setup_eeprom();
   setup_radio(&my_radio);
   setup_canbus(&my_car);
   setup_genie_display(&my_display, &my_car);
@@ -1513,13 +1456,12 @@ void setup()
 void loop()
 {
   while (1) {
-#ifdef NO_CAN
-    watchdog_reset();
-#endif
+//#ifdef NO_CAN
+//    watchdog_reset();
+//#endif
     if (loop_now_update)
       loop_now = millis();
     query_all_sensors(&my_car);
     refresh_display(&my_display, current_screen);
   }
 }
-
