@@ -28,6 +28,7 @@ typedef struct {
   void sendFrame(CAN_FRAME out);
   void setRXFilter(int can_id, uint32_t mask, bool extended);
   void setGeneralCallback(void(*fn)(CAN_FRAME *));
+  void isr(void);
 } CANRaw;
 
 CANRaw CAN_HS;
@@ -36,25 +37,34 @@ CANRaw CAN_LS;
 bool CANRaw::begin(uint8_t rate)
 {
   can.init_CS(cs_pin);
-  return can.begin(rate, MCP_8MHz);
+  return can.begin(rate, MCP_8MHz) == MCP2515_OK;
 }
 
-void isr(void)
+void can_hs_isr(void)
+{
+  CAN_HS.isr();
+}
+
+void can_ls_isr(void)
+{
+  CAN_LS.isr();
+}
+
+void CANRaw::isr(void)
 {
   uint8_t len;
   CAN_FRAME in;
-#if 0
+
   while (can.readMsgBuf(&len, in.data.bytes)) {
     if (cb)
       cb(&in);
   }
-#endif
 }
 
 void CANRaw::setGeneralCallback(void(*fn)(CAN_FRAME *))
 {
   cb = fn;
-  attachInterrupt(digitalPinToInterrupt(int_pin), isr, FALLING);
+  attachInterrupt(digitalPinToInterrupt(int_pin), (this == &CAN_HS) ? can_hs_isr : can_ls_isr, FALLING);
 }
 
 void CANRaw::setRXFilter(int can_id, uint32_t mask, bool extended)

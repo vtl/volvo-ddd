@@ -214,8 +214,7 @@ typedef struct car {
 
 #define SET_CAR_PARAM(_car, _param, _value) \
   do { \
-    struct car *car = _car; \
-    car->_param = _value; \
+    (_car)->_param = _value; \
   } while (0)
 
 #define DECLARE_MODULE(_car, _id, _name, _req_id, _can_id, _canbus, _frame_type) \
@@ -727,10 +726,10 @@ void setup_canbus(struct car *car)
 
   printf("setup CAN-bus...\n");
 
-  CAN_HS.cs_pin = 10;
-  CAN_HS.int_pin = 11;
-  CAN_LS.cs_pin = 12;
-  CAN_LS.int_pin = 13;
+  CAN_HS.cs_pin = 5;
+  CAN_HS.int_pin = 15;
+  CAN_LS.cs_pin = 2;
+  CAN_LS.int_pin = 4;
 
   car->can_hs_ok = CAN_HS.begin(car->can_hs_rate);
   car->can_ls_ok = CAN_LS.begin(car->can_ls_rate);
@@ -740,8 +739,8 @@ void setup_canbus(struct car *car)
     module->canbus->setRXFilter(module->can_id, 0x1fffff, true);
   }
 
-//  CAN_HS.setGeneralCallback(can_callback0);
-//  CAN_LS.setGeneralCallback(can_callback1);
+  CAN_HS.setGeneralCallback(can_callback0);
+  CAN_LS.setGeneralCallback(can_callback1);
 
   printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
   printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
@@ -1455,7 +1454,7 @@ void setup()
 
 void loop()
 {
-  while (1) {
+  while (0) {
 //#ifdef NO_CAN
 //    watchdog_reset();
 //#endif
