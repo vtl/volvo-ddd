@@ -13,8 +13,10 @@ int debug_print = 1;
 
 #include <genieArduino.h>
 #include <Preferences.h>
+#include "esp32/pin.h"
 #include "esp32/can.h"
 #include "esp32/eeprom.h"
+#include "esp32/timer.h"
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -24,19 +26,8 @@ float temp_c_to_f(float c)
   return c * 1.8 + 32;
 }
 
-#define LCD_RESET_LINE 2
 #define LCD_RESET_DELAY 5500
 #define WDT_TIMEOUT 1500
-
-#define SWC_PIN     44
-#define RTI_PIN     42
-#define ILLUMI_PIN  40
-#define CAMERA_PIN  38
-#define GPS_BUT_PIN 36
-#define GPS_PWR_PIN 34
-#define PARK_PIN    32 // no op, no free wires in new design...
-#define RSE_LEFT_DISPLAY_EN_PIN  45
-#define RSE_RIGHT_DISPLAY_EN_PIN 43
 
 Genie genie;
 
@@ -380,10 +371,10 @@ void reset_display(struct genie_display *display)
   display->genie.AttachEventHandler(display_event_callback);
   display->ready = false;
   display->current_screen = 0;
-  pinMode(LCD_RESET_LINE, OUTPUT);
-  digitalWrite(LCD_RESET_LINE, LOW);
+  pinMode(LCD_RESET_PIN, OUTPUT);
+  digitalWrite(LCD_RESET_PIN, LOW);
   delay(100);
-  digitalWrite(LCD_RESET_LINE, HIGH);
+  digitalWrite(LCD_RESET_PIN, HIGH);
   display->init_started_ms = millis();
 }
 
@@ -682,7 +673,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
 
   if (debug_print)
     printf("idx %d, len %d\n", module->rcv_idx, len);
-  memcpy(module->rcv_data + module->rcv_idx, in->data.bytes + offset, len - offset); // FIXME how many bytes to skip?
+  memcpy(module->rcv_data + module->rcv_idx, in->data.bytes + offset, len - offset);
   module->rcv_idx += len - offset;
 
   if ((in->data.bytes[0] & 0x40) == 0) { // not frame end
@@ -965,7 +956,7 @@ typedef struct radio {
   struct radio_command *last_command;
   long last_command_ms;
   long command_sequence;
-// FIXME  DueTimer *timer;
+  struct timer timer;
   bool busy;
   int cur_bit;
   uint8_t data[49];
@@ -1028,14 +1019,14 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
   radio->cur_bit = 0;
   pinMode(radio->control_pin, OUTPUT);
   digitalWrite(radio->control_pin, !LOW);
-// FIXME  radio->timer->attachInterrupt(radio_isr_send_start).start(10000 - N);
+  radio->timer.arm(radio_isr_send_start, 10000 - N, false);
 }
 
 void radio_isr_send_start()
 {
   struct radio *radio = &my_radio;
   digitalWrite(radio->control_pin, !HIGH);
-// FIXME  radio->timer->attachInterrupt(radio_isr_send_bit).start(4500 - N);
+  radio->timer.arm(radio_isr_send_bit, 4500 - N, false);
 }
 
 void radio_isr_send_bit()
@@ -1043,7 +1034,7 @@ void radio_isr_send_bit()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !radio->data[radio->cur_bit++]);
-// FIXME  radio->timer->attachInterrupt(radio_isr_send_bit_finish).start(1000 - N);
+  radio->timer.arm(radio_isr_send_bit_finish, 1000 - N, false);
 }
 
 void radio_isr_send_bit_finish()
@@ -1051,24 +1042,24 @@ void radio_isr_send_bit_finish()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !HIGH);
-// FIXME
-//  if (radio->cur_bit == 50) {
-//    radio_isr_stop();
-//  } else
-//    radio->timer->attachInterrupt(radio_isr_send_bit).start(200 - N);
+
+  if (radio->cur_bit == 50)
+    radio_isr_stop();
+  else
+    radio->timer.arm(radio_isr_send_bit, 200 - N, false);
 }
 
 void radio_isr_stop()
 {
   struct radio *radio = &my_radio;
 
-// FIXME  radio->timer->stop();
+  radio->timer.stop();
   radio->busy = false;
 }
 
 void setup_radio(struct radio *radio)
 {
-// FIXME  radio->timer = &Timer6;
+  radio->timer.init(0);
   radio->busy = false;
   radio->commands = 0;
   radio->control_pin = SWC_PIN;
@@ -1122,7 +1113,7 @@ void setup_radio(struct radio *radio)
 }
 
 static int screen_arm_busy = false;
-// FIXME static DueTimer *screen_arm_timer = &Timer7;
+struct timer screen_arm_timer(1);
 
 void radio_arm_next_screen()
 {
@@ -1347,8 +1338,7 @@ void set_can_poll(struct car *car, bool en)
 ///////////////////// RTI ////////////////////////////////
 // levels are inverted
 
-// FIXME
-//static DueTimer *rti_serial_timer = &Timer5;
+struct timer rti_serial_timer(2);
 
 static unsigned char rti_bytes[] = { 0x40, 0x40, 0x83 };
 int rti_byte = 0;
@@ -1369,10 +1359,10 @@ void rti_en(bool en)
     rti_enabled = true;
     pinMode(RTI_PIN, OUTPUT);
     digitalWrite(RTI_PIN, !HIGH);
-//    rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(1000); // 1 ms
+    rti_serial_timer.arm(rti_isr_send_start_bit, 1000, false); // 1 ms
   } else {
     rti_enabled = false;
-//    rti_serial_timer->stop();
+    rti_serial_timer.stop();
   }
 }
 
@@ -1383,7 +1373,7 @@ void rti_isr_send_start_bit()
 
   rti_bit = 0;
   digitalWrite(RTI_PIN, !LOW); // start bit
-//  rti_serial_timer->attachInterrupt(rti_isr_send_bit).setFrequency(2400).start(); // 2400 baud
+  rti_serial_timer.arm(rti_isr_send_bit, 1000000 / 2400, true); // 2400 baud
 }
 
 void rti_isr_send_bit()
@@ -1396,8 +1386,8 @@ void rti_isr_send_bit()
 
   digitalWrite(RTI_PIN, !bit);
   rti_bit++;
-//  if (rti_bit >= 8)
-//    rti_serial_timer->attachInterrupt(rti_isr_send_stop_bit).setFrequency(2400).start();
+  if (rti_bit >= 8)
+    rti_serial_timer.arm(rti_isr_send_stop_bit, 1000000 / 2400, false);
 }
 
 void rti_isr_send_stop_bit()
@@ -1407,7 +1397,7 @@ void rti_isr_send_stop_bit()
 
   rti_byte = (rti_byte + 1) % (sizeof(rti_bytes));
   digitalWrite(RTI_PIN, !HIGH);
-//  rti_serial_timer->attachInterrupt(rti_isr_send_start_bit).start(100000); // 100 ms between bytes
+  rti_serial_timer.arm(rti_isr_send_start_bit, 100000, false); // 100 ms between bytes
 }
 
 //////////////////////////////////////////////////////////
