@@ -25,7 +25,8 @@ typedef struct {
   uint8_t int_pin;
   void(*cb)(CAN_FRAME *);
   bool begin(uint8_t rate);
-  void sendFrame(CAN_FRAME out);
+  bool read(CAN_FRAME &in);
+  void sendFrame(CAN_FRAME& out);
   void setRXFilter(int can_id, uint32_t mask, bool extended);
   void setGeneralCallback(void(*fn)(CAN_FRAME *));
   void isr(void);
@@ -52,13 +53,19 @@ void can_ls_isr(void)
 
 void CANRaw::isr(void)
 {
-  uint8_t len;
   CAN_FRAME in;
 
-  while (can.readMsgBuf(&len, in.data.bytes)) {
+  printf("ISR\n");
+
+  while (can.readMsgBuf(&in.length, in.data.bytes)) {
     if (cb)
       cb(&in);
   }
+}
+
+bool CANRaw::read(CAN_FRAME &in)
+{
+  return can.readMsgBuf(&in.length, in.data.bytes);
 }
 
 void CANRaw::setGeneralCallback(void(*fn)(CAN_FRAME *))
@@ -72,9 +79,11 @@ void CANRaw::setRXFilter(int can_id, uint32_t mask, bool extended)
   printf("%s stub can_id 0x%x, mask 0x%x, extended %d\n", __func__, can_id, mask, extended);
 }
 
-void CANRaw::sendFrame(CAN_FRAME out)
+void CANRaw::sendFrame(CAN_FRAME& out)
 {
-//  can->
+  int ret = can.sendMsgBuf(out.id, out.extended, 8, out.data.bytes);
+  if (ret != CAN_OK)
+    printf("sendFrame error\n");
 }
 
 byte can_read(struct MCP_CAN *can, CAN_FRAME *in)

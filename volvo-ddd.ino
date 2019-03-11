@@ -13,7 +13,7 @@ int debug_print = 1;
 
 #include <genieArduino.h>
 #include <Preferences.h>
-#include "esp32/pin.h"
+#include "esp32/pins.h"
 #include "esp32/can.h"
 #include "esp32/eeprom.h"
 #include "esp32/timer.h"
@@ -710,6 +710,16 @@ void can_callback1(CAN_FRAME *in)
   can_callback_multiframe((char *)"CAN LS", in);
 }
 
+void canbus_read(struct car *car)
+{
+  CAN_FRAME in;
+
+  if (CAN_HS.read(in))
+    can_callback_multiframe((char *)"CAN HS", &in);
+  if (CAN_LS.read(in))
+    can_callback_multiframe((char *)"CAN LS", &in);
+}
+
 void setup_canbus(struct car *car)
 {
   module_t *module;
@@ -717,10 +727,10 @@ void setup_canbus(struct car *car)
 
   printf("setup CAN-bus...\n");
 
-  CAN_HS.cs_pin = 5;
-  CAN_HS.int_pin = 15;
-  CAN_LS.cs_pin = 2;
-  CAN_LS.int_pin = 4;
+  CAN_LS.cs_pin = 5;
+  CAN_LS.int_pin = 37;
+  CAN_HS.cs_pin = 2;
+  CAN_HS.int_pin = 36;
 
   car->can_hs_ok = CAN_HS.begin(car->can_hs_rate);
   car->can_ls_ok = CAN_LS.begin(car->can_ls_rate);
@@ -730,8 +740,8 @@ void setup_canbus(struct car *car)
     module->canbus->setRXFilter(module->can_id, 0x1fffff, true);
   }
 
-  CAN_HS.setGeneralCallback(can_callback0);
-  CAN_LS.setGeneralCallback(can_callback1);
+//  CAN_HS.setGeneralCallback(can_callback0);
+//  CAN_LS.setGeneralCallback(can_callback1);
 
   printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
   printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
@@ -1444,12 +1454,13 @@ void setup()
 
 void loop()
 {
-  while (0) {
+  while (1) {
 //#ifdef NO_CAN
 //    watchdog_reset();
 //#endif
     if (loop_now_update)
       loop_now = millis();
+    canbus_read(&my_car);
     query_all_sensors(&my_car);
     refresh_display(&my_display, current_screen);
   }
