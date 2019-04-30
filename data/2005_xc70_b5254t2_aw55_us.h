@@ -116,10 +116,10 @@ void car_init(struct car * car)
   DECLARE_SENSOR(car, DEM, DEM_OIL_PRESSURE,         "Oil pressure",         ARRAY(0xa6, 0x00, 0x03, 0x01), VALUE_FLOAT, (sensor->value.v_float = bytes[5] * 0.0164));
   DECLARE_SENSOR(car, DEM, DEM_OIL_TEMPERATURE,      "Oil temperature",      ARRAY(0xa6, 0x00, 0x02, 0x01), VALUE_INT, (sensor->value.v_int = (signed char)bytes[5]));
   DECLARE_SENSOR(car, DEM, DEM_FRONT_LEFT_SPEED,     "FL velocity",          ARRAY(0xa6, 0x00, 0x06, 0x01), VALUE_FLOAT,
-                 (sensor->value.v_float                                                    = (uint16_t)(256 * bytes[ 6] + bytes[ 7]) * 0.0156,
-                 (find_sensor_by_id(sensor->module, DEM_FRONT_RIGHT_SPEED))->value.v_float = (uint16_t)(256 * bytes[ 8] + bytes[ 9]) * 0.0156,
-                 (find_sensor_by_id(sensor->module, DEM_REAR_LEFT_SPEED))->value.v_float   = (uint16_t)(256 * bytes[10] + bytes[11]) * 0.0156,
-                 (find_sensor_by_id(sensor->module, DEM_REAR_RIGHT_SPEED))->value.v_float  = (uint16_t)(256 * bytes[12] + bytes[13]) * 0.0156));
+                 (sensor->value.v_float                                                    = (uint16_t)(256 * bytes[ 8] + bytes[ 9]) * 0.0156,
+                 (find_sensor_by_id(sensor->module, DEM_FRONT_RIGHT_SPEED))->value.v_float = (uint16_t)(256 * bytes[ 6] + bytes[ 7]) * 0.0156,
+                 (find_sensor_by_id(sensor->module, DEM_REAR_LEFT_SPEED))->value.v_float   = (uint16_t)(256 * bytes[12] + bytes[13]) * 0.0156,
+                 (find_sensor_by_id(sensor->module, DEM_REAR_RIGHT_SPEED))->value.v_float  = (uint16_t)(256 * bytes[10] + bytes[11]) * 0.0156));
   DECLARE_SENSOR(car, DEM, DEM_FRONT_RIGHT_SPEED,    "FR velocity",          ARRAY(0x00),                   VALUE_FLOAT, (0));
   DECLARE_SENSOR(car, DEM, DEM_REAR_LEFT_SPEED,      "RL velocity",          ARRAY(0x00),                   VALUE_FLOAT, (0));
   DECLARE_SENSOR(car, DEM, DEM_REAR_RIGHT_SPEED,     "RR velocity",          ARRAY(0x00),                   VALUE_FLOAT, (0));
