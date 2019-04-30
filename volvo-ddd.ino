@@ -12,6 +12,7 @@ int debug_print = 0;
 StreamEx SerialEx = Serial;//USB;
 
 //#define NO_CAN
+#define NO_CAN_CALLBACK /* poll vs irq */
 
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
@@ -739,6 +740,22 @@ void can_callback1(CAN_FRAME *in)
   can_callback_multiframe((char *)"CAN LS", in);
 }
 
+void check_can(const char *id, CANRaw *can)
+{
+  CAN_FRAME in;
+
+  while (can->rx_avail()) {
+    can->read(in);
+    can_callback_multiframe((char *)id, &in);
+  }
+}
+
+void check_cans(struct car *car)
+{
+  check_can("HS", &CAN_HS);
+  check_can("LS", &CAN_LS);
+}
+
 void setup_canbus(struct car *car)
 {
   module_t *module;
@@ -754,8 +771,10 @@ void setup_canbus(struct car *car)
     module->canbus->setRXFilter(module->can_id, 0x1fffff, true);
   }
 
+#ifndef NO_CAN_CALLBACK
   Can0.setGeneralCallback(can_callback0);
   Can1.setGeneralCallback(can_callback1);
+#endif
 
   SerialEx.printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
   SerialEx.printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
@@ -1524,8 +1543,10 @@ void loop()
 #endif
     if (loop_now_update)
       loop_now = millis();
+#ifdef NO_CAN_CALLBACK
+    check_cans(&my_car);
+#endif
     query_all_sensors(&my_car);
     refresh_display(&my_display, current_screen);
   }
 }
-
