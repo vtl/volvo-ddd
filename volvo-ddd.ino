@@ -428,7 +428,7 @@ void refresh_display(struct genie_display *display, int screen)
 
   if (!display->enabled) {
     if (!display_off_once) {
-          display->genie.WriteContrast(display->enabled);
+          display->genie.WriteContrast(display->enabled ? 15 :0);
           display_off_once = true;
     }
     return;
@@ -437,7 +437,7 @@ void refresh_display(struct genie_display *display, int screen)
   if (display->ready) {
     display->genie.DoEvents();
     long ms = millis();
-    display->genie.WriteContrast(display->enabled);
+    display->genie.WriteContrast(display->enabled ? 15 : 0);
 
     if (millis() - ms > 500) {
       reset_display(display);
