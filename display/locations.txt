@@ -1,0 +1,144 @@
+-Form0 (Imp)
+Angularmeter0 (MAINIMPBOOST)   PSI * 10
+Leddigits2 (MAINIMPENG)   
+Leddigits26 (MAINIMPATF)   
+Leddigits27 (MAINIMPAIR)   
+Statictext0   F
+Statictext1   F
+Statictext2   F
+Statictext3   AIR
+Statictext4   ATF
+Statictext5   ENG
+Userled3 (MAINIMPENGSIGN)   
+Userled4 (MAINIMPATFSIGN)   
+Userled5 (MAINIMPAIRSIGN)   
+-Form1 (Metric)
+Angularmeter2 (MAINMETBOOST)   BAR * 100
+Leddigits3 (MAINMETENG)   
+Leddigits4 (MAINMETATF)   
+Leddigits5 (MAINMETAIR)   
+Statictext10   C
+Statictext11   C
+Statictext6   ENG
+Statictext7   ATF
+Statictext8   AIR
+Statictext9   C
+Userled6 (MAINMETENGSIGN)   
+Userled7 (MAINMETATFSIGN)   
+Userled8 (MAINMETAIRSIGN)   
+-Form2 (Engine)
+Leddigits0 (ECMBOOST)   
+Leddigits1 (ECMTORQUE)   
+Leddigits22 (ECMFPMPDUT)   
+Leddigits23 (ECMFUELPRES)   
+Leddigits24 (ECMSTFT)   
+Leddigits25 (ECMLTFT)   
+Leddigits6 (ECMRPM)   
+Leddigits7 (ECMBATVOLT)   
+Statictext12   RPM
+Statictext13   BAT
+Statictext26   FPMP
+Statictext27   FPRES
+Statictext28   STFT
+Statictext29   LTFT
+Statictext30   BOOST
+Statictext31   TRQ
+Userled0 (ECMTORQUESIGN)   
+Userled1 (ECMSTFTSIGN)   
+Userled2 (ECMLTFTSIGN)   
+-Form3 (Transmission)
+Led0 (TCMS1)   S1
+Led1 (TCMS2)   S2
+Led2 (TCMS3)   S3
+Led3 (TCMS4)   S4
+Led4 (TCMS5)   S5
+Leddigits10 (TCMSLUCUR)   
+Leddigits11 (TCMENGTRQ)   
+Leddigits12 (TCMRATIO)   
+Leddigits17 (TCMATFTEMP)   
+Leddigits8 (TCMSLTCUR)   
+Leddigits9 (TCMSLSCUR)   
+Statictext14   SEL
+Statictext15   GEAR
+Statictext16   SLT
+Statictext17   SLS
+Statictext18   SLU
+Statictext19   TRQ
+Statictext20   RATIO
+Statictext21   ATF
+Strings0 (TCMSEL)   
+Strings1 (TCMGEAR)   
+Userled10 (TCMATFTEMPSIGN)   
+Userled9 (TCMENGTRQSIGN)   
+-Form4 (DEM)
+Leddigits13 (DEMSPDFL)   
+Leddigits14 (SPDFR)   
+Leddigits15 (SPDRL)   
+Leddigits16 (SPDRR)   
+Leddigits18 (DEMOILTEMP)   
+Leddigits19 (DEMOILPRES)   
+Leddigits20 (SOLCUR)   
+Leddigits21 (DEMPUMPCUR)   
+Statictext22   OIL, C
+Statictext23   OIL, MPa
+Statictext24   SOL, mA
+Statictext25   PMP, mA
+Userled12 (DEMOILTEMPSIGN)   
+-Form5 (A/C)
+Leddigits28 (ECMACPRES)   
+Leddigits29 (CCMEVAPTEMP)   
+Leddigits30 (CCMCABINTEMP)   
+Leddigits31 (CCMBLOWER)   
+Statictext32   AC
+Statictext33   EVAP
+Statictext34   CABIN
+Statictext35   BLOWER
+Userled11 (CCMEVAPTEMPSIG)   
+Userled13 (ECMACON)   
+Userled14 (CCMCABINTEMPSIG)   
+-Form6 (Engine 2)
+Leddigits32 (ECMBTDC)   
+Leddigits33 (ECMTCV)   
+Leddigits34 (ECMMAF)   
+Leddigits35 (ECMTHROTTLE)   
+Leddigits36 (ECMFAN)   
+Leddigits37 (ECMVVTIN)   
+Leddigits38 (ECMVVTEX)   
+Leddigits39 (ECMMISFIRE)   
+Statictext36   MISFIRE
+Statictext37   TCV
+Statictext38   VVTI
+Statictext39   VVTE
+Statictext40   ENGFAN
+Statictext41   THROT
+Statictext42   MAF
+Statictext43   BTDC
+Userled15 (ECMBTDCSIGN)   
+Userled16 (ECMVVTINSIGN)   
+Userled17 (ECMVVTEXSIGN)   
+-Form7 (RTI-RSE)
+4Dbutton0   
+4Dbutton1   
+4Dbutton2   
+Statictext44   GPS NAV
+Statictext45   LEFT DISP
+Statictext46   RIGHT DISP
+-Form8 (RESET)
+4Dbutton3 (SRIRESET)   
+4Dbutton4 (TRANSADAPT)   
+4Dbutton5 (CANPOLL)   
+4Dbutton6   
+Statictext47   SRI RESET
+Statictext48   TRANS ADAPT
+Statictext49   CAN POLL
+Statictext50   KEY CYCLE
+-Form9 (MENU)
+Winbutton0   IMPERIAL
+Winbutton1   METRIC
+Winbutton2   ECM 1
+Winbutton3   TCM
+Winbutton4   DEM
+Winbutton5   CCM
+Winbutton6   ECM 2
+Winbutton7   RTI-RSE
+Winbutton8   RESET
