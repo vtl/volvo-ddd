@@ -105,3 +105,14 @@ DECLARE_WIDGET("Right display",           display, 7, GENIE_OBJ_4DBUTTON, 2, 0, 
 DECLARE_WIDGET("SRI reset",               display, 8, GENIE_OBJ_4DBUTTON, 3, 0, 1, widget->current_value, event_sri_reset(widget));
 DECLARE_WIDGET("Transmission adaptation", display, 8, GENIE_OBJ_4DBUTTON, 4, 0, 1, widget->current_value, event_transmission_adaptation(widget));
 DECLARE_WIDGET("Can poll",                display, 8, GENIE_OBJ_4DBUTTON, 5, 0, 1, widget->current_value, event_can_poll(widget));
+DECLARE_WIDGET("Key cycle",               display, 8, GENIE_OBJ_4DBUTTON, 6, 0, 1, widget->current_value, event_key_cycle(widget));
+
+DECLARE_WIDGET("Goto Imperial",           display, 9, GENIE_OBJ_WINBUTTON, 0, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto Metric",             display, 9, GENIE_OBJ_WINBUTTON, 1, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto ECM1",               display, 9, GENIE_OBJ_WINBUTTON, 2, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto TCM",                display, 9, GENIE_OBJ_WINBUTTON, 3, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto DEM",                display, 9, GENIE_OBJ_WINBUTTON, 4, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto CCM",                display, 9, GENIE_OBJ_WINBUTTON, 5, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto ECM2",               display, 9, GENIE_OBJ_WINBUTTON, 6, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto RTI-RSE",            display, 9, GENIE_OBJ_WINBUTTON, 7, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto Reset",              display, 9, GENIE_OBJ_WINBUTTON, 8, 0, 1, widget->current_value, event_goto_screen(widget));

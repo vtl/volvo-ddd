@@ -52,6 +52,7 @@ float temp_c_to_f(float c)
 #define EEPROM_RSE_LEFT_EN    18
 #define EEPROM_RSE_RIGHT_EN   19
 #define EEPROM_RTI_EN         20
+#define EEPROM_KEY_CYCLE      21
 
 Genie genie;
 
@@ -994,6 +995,7 @@ typedef struct radio {
   const char *name;
   void setup(struct car *car);
   void event(struct car *car, int event, int);
+  bool key_cycle;
   int control_pin;
   int illumi_pin;
   int park_pin;
@@ -1368,6 +1370,17 @@ void event_can_poll(struct genie_widget *widget)
   }
 }
 
+void event_key_cycle(struct genie_widget *widget)
+{
+  SerialEx.printf("event key cycle (STUB)\n");
+}
+
+void event_goto_screen(struct genie_widget *widget)
+{
+  SerialEx.printf("event goto screen %d\n", widget->object_index);
+  current_screen = widget->object_index;
+}
+
 extern "C" void _watchdogEnable (void) {}
 extern "C" void _watchdogDisable (void) {}
 
@@ -1457,6 +1470,11 @@ void setup_eeprom(genie_display *display)
   en = eeprom_load(EEPROM_RTI_EN, 0);
   set_widget(&my_display, "GPS navigation", en);
   rti_en(en);
+
+  en = eeprom_load(EEPROM_KEY_CYCLE, 0);
+  set_widget(&my_display, "Key cycle", en);
+  my_radio.key_cycle = en;
+
 }
 
 ///////////////////// RTI ////////////////////////////////
