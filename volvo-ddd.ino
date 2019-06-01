@@ -1332,7 +1332,7 @@ void event_transmission_adaptation(struct genie_widget *widget)
   out.length = 8;
 
   out.data.byte[0] = 0xcb;
-  out.data.byte[1] = 0x6e;
+  out.data.byte[1] = 0x51;
   out.data.byte[2] = 0xb2;
   out.data.byte[3] = 0x50;
 
