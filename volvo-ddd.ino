@@ -12,7 +12,7 @@ int debug_print = 0;
 StreamEx SerialEx = Serial;//USB;
 
 //#define NO_CAN
-#define NO_CAN_CALLBACK /* poll vs irq */
+//#define NO_CAN_CALLBACK /* poll vs irq */
 
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
@@ -32,6 +32,7 @@ float temp_c_to_f(float c)
 
 #define LCD_RESET_LINE 2
 #define LCD_RESET_DELAY 5500
+#define LCD_CMD_TIMEOUT 750
 #define WDT_TIMEOUT 1500
 
 #define SWC_PIN     44
@@ -323,6 +324,7 @@ typedef struct genie_display {
   int max_screen = 0;
   struct car *car;
   int widget_count = 0;
+  int light_level = 15;
   genie_widget_t widget[MAX_WIDGETS];
 } genie_display_t;
 
@@ -367,7 +369,7 @@ bool widget_update(struct genie_widget *widget, bool force)
     if (debug_print)
       SerialEx.printf("widget %s update took %d ms\n", widget->name, millis() - ms);
 
-    if (millis() - ms > 500)
+    if (millis() - ms > LCD_CMD_TIMEOUT)
       return false;
   }
   return true;
@@ -405,6 +407,10 @@ void reset_display(struct genie_display *display)
   display->init_started_ms = millis();
 }
 
+car_t my_car;
+genie_display my_display;
+int current_screen;
+
 void setup_genie_display(struct genie_display *display, struct car *car)
 {
   display->car = car;
@@ -413,6 +419,9 @@ void setup_genie_display(struct genie_display *display, struct car *car)
 
 #include WIDGETS
 }
+
+bool loop_now_update = true;
+long loop_now = 0; // timestamp of loop()
 
 void refresh_display(struct genie_display *display, int screen)
 {
@@ -428,7 +437,7 @@ void refresh_display(struct genie_display *display, int screen)
 
   if (!display->enabled) {
     if (!display_off_once) {
-          display->genie.WriteContrast(display->enabled ? 15 :0);
+          display->genie.WriteContrast(display->enabled ? display->light_level :0);
           display_off_once = true;
     }
     return;
@@ -437,15 +446,15 @@ void refresh_display(struct genie_display *display, int screen)
   if (display->ready) {
     display->genie.DoEvents();
     long ms = millis();
-    display->genie.WriteContrast(display->enabled ? 15 : 0);
+    display->genie.WriteContrast(display->enabled ? display->light_level : 0);
 
-    if (millis() - ms > 500) {
+    if (millis() - ms > LCD_CMD_TIMEOUT) {
       reset_display(display);
       goto do_widgets;
     }
 
     if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
-      SerialEx.printf("changing screen to %d\n", screen);
+      SerialEx.printf("changing screen from %d to %d\n", display->current_screen, screen);
       display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
       display->current_screen = screen;
       force = true;
@@ -455,7 +464,7 @@ do_widgets:
   for (int i = 0; i < display->widget_count; i++) {
     if (display->widget[i].screen == display->current_screen) {
       if (!widget_update(&display->widget[i], force)) {
-            reset_display(display);
+         reset_display(display);
       }
     }
   }
@@ -475,10 +484,6 @@ bool set_widget(struct genie_display *display, const char *name, long value)
   return i != display->widget_count;
 }
 
-car_t my_car;
-genie_display my_display;
-int current_screen = 0;
-
 void genie_change_screen(int offset)
 {
   current_screen = (current_screen + offset) % (my_display.max_screen + 1);
@@ -494,9 +499,6 @@ void genie_previous_screen()
 {
   genie_change_screen(my_display.max_screen);
 }
-
-bool loop_now_update = true;
-long loop_now = 0; // timestamp of loop()
 
 void watchdog_reset() // should be called from interrupt handler
 {
@@ -1210,7 +1212,9 @@ void swm_audio_controls_cb(struct sensor *sensor)
 
 void cem_ambient_light_cb(struct sensor *sensor)
 {
-  radio_event(&my_radio, RADIO_EVENT_ILLUMI, get_sensor_value(sensor, 1));
+  int level = get_sensor_value(sensor, 1);
+  radio_event(&my_radio, RADIO_EVENT_ILLUMI, level);
+  my_display.light_level = level ? 15 : 5;
 }
 
 void tcm_gearbox_position_cb(struct sensor *sensor)
@@ -1530,7 +1534,9 @@ void setup()
   setup_car(&my_car);
   setup_eeprom();
   setup_radio(&my_radio);
+#ifndef NO_CAN
   setup_canbus(&my_car);
+#endif
   setup_genie_display(&my_display, &my_car);
   setup_eeprom(&my_display);
 }
