@@ -1140,7 +1140,8 @@ void setup_radio(struct radio *radio)
   DECLARE_RADIO_COMMAND("vol up",     &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0111, 0b1111), radio_send_bits(command, (const uint8_t[]) {
     0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0
   }));
-  DECLARE_RADIO_COMMAND("next screen",    &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
+//  DECLARE_RADIO_COMMAND("next screen",    &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_arm_next_screen());
+  DECLARE_RADIO_COMMAND("swc combo",      &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b0110, 0b1111), radio_swc_combo());
   DECLARE_RADIO_COMMAND("toggle CAN-bus", &my_radio, RADIO_EVENT_SWC, EVENT_HIT(0b1001, 0b1111), radio_killswitch());
   DECLARE_RADIO_COMMAND("rearm keypress delay",  &my_radio, RADIO_EVENT_SWC,  EVENT_HIT(0b1111, 0b1111), radio_set_keypress_delay(command->radio));
  
@@ -1169,6 +1170,23 @@ void radio_arm_next_screen()
   screen_arm_busy = true;
   screen_arm_timer->attachInterrupt(radio_unarm_delay).start(1000000);
   genie_next_screen();
+}
+
+void radio_swc_combo()
+{
+  if (screen_arm_busy)
+    return;
+
+  if (!my_display.enabled) { // enable it
+    set_can_poll(&my_car, !my_car.can_poll);
+    my_display.enabled = my_car.can_poll;
+    set_widget(&my_display, "Can poll", my_car.can_poll);
+  }
+
+  if (!my_radio.key_cycle)
+    radio_arm_next_screen();
+  else
+    current_screen = 9;
 }
 
 void radio_unarm_delay()
@@ -1235,7 +1253,7 @@ void ccm_switch_status_cb(struct sensor *sensor)
   } else if (!status && last_status) {  /* release */
     if (!once) {
       if (millis() - last_pressed_time < 1000) {
-        genie_next_screen();
+        radio_swc_combo(); //genie_next_screen();
       } else {
         genie_previous_screen();
       }
@@ -1372,7 +1390,11 @@ void event_can_poll(struct genie_widget *widget)
 
 void event_key_cycle(struct genie_widget *widget)
 {
-  SerialEx.printf("event key cycle (STUB)\n");
+  SerialEx.printf("event key cycle\n");
+  if (widget->current_value != my_radio.key_cycle) {
+    my_radio.key_cycle = !!widget->current_value;
+    eeprom_store(EEPROM_KEY_CYCLE, my_radio.key_cycle);
+  }
 }
 
 void event_goto_screen(struct genie_widget *widget)
