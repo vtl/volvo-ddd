@@ -485,10 +485,15 @@ bool set_widget(struct genie_display *display, const char *name, long value)
   return i != display->widget_count;
 }
 
+void genie_set_screen(int screen)
+{
+  current_screen = screen;
+  eeprom_store(EEPROM_CURRENT_SCREEN, current_screen);
+}
+
 void genie_change_screen(int offset)
 {
-  current_screen = (current_screen + offset) % (my_display.max_screen + 1);
-  eeprom_store(EEPROM_CURRENT_SCREEN, current_screen);
+  genie_set_screen((current_screen + offset) % (my_display.max_screen + 1));
 }
 
 void genie_next_screen()
@@ -1183,10 +1188,10 @@ void radio_swc_combo()
     set_widget(&my_display, "Can poll", my_car.can_poll);
   }
 
-  if (!my_radio.key_cycle)
+  if (my_radio.key_cycle)
     radio_arm_next_screen();
   else
-    current_screen = 9;
+    genie_set_screen(my_display.max_screen);
 }
 
 void radio_unarm_delay()
