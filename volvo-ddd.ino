@@ -31,7 +31,7 @@ float temp_c_to_f(float c)
 }
 
 #define LCD_RESET_LINE 2
-#define LCD_RESET_DELAY 5500
+#define LCD_RESET_DELAY 3500
 #define LCD_CMD_TIMEOUT 750
 #define WDT_TIMEOUT 1500
 
