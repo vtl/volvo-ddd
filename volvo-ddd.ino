@@ -1405,7 +1405,7 @@ void event_key_cycle(struct genie_widget *widget)
 void event_goto_screen(struct genie_widget *widget)
 {
   SerialEx.printf("event goto screen %d\n", widget->object_index);
-  current_screen = widget->object_index;
+  genie_set_screen(widget->object_index);
 }
 
 extern "C" void _watchdogEnable (void) {}
