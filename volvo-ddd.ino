@@ -31,7 +31,7 @@ float temp_c_to_f(float c)
   return c * 1.8 + 32;
 }
 
-#define LCD_RESET_DELAY 5500
+#define LCD_RESET_DELAY 3500
 #define WDT_TIMEOUT 1500
 
 Genie genie;
