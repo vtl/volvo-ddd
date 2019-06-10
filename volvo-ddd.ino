@@ -3,7 +3,7 @@
 
    A car junkie display :)
 
-   (c) 2016-2018 Vitaly Mayatskikh <vitaly@gravicappa.info>
+   (c) 2016-2019 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
 #include <PrintEx.h>
@@ -455,7 +455,8 @@ void refresh_display(struct genie_display *display, int screen)
     }
 
     if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
-      SerialEx.printf("changing screen from %d to %d\n", display->current_screen, screen);
+      if (debug_print)
+        SerialEx.printf("changing screen from %d to %d\n", display->current_screen, screen);
       display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
       display->current_screen = screen;
       force = true;
@@ -1305,7 +1306,8 @@ void rse_left_display_en(bool en)
   if (inited && (en == last_state))
     return;
   last_state = en;
-  SerialEx.printf("left display %d\n", en);
+  if (debug_print)
+    SerialEx.printf("left display %d\n", en);
   digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !en);
   eeprom_store(EEPROM_RSE_LEFT_EN, en);
 }
@@ -1317,7 +1319,8 @@ void rse_right_display_en(bool en)
   if (inited && (en == last_state))
     return;
   last_state = en;
-  SerialEx.printf("right display %d\n", en);
+  if (debug_print)
+    SerialEx.printf("right display %d\n", en);
   digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !en);
   eeprom_store(EEPROM_RSE_RIGHT_EN, en);
 }
@@ -1344,7 +1347,7 @@ void event_sri_reset(struct genie_widget *widget)
 {
   CAN_FRAME out;
 
-//  if (debug_print)
+  if (debug_print)
     SerialEx.printf("SRI reset\n");
 
   memset(out.data.bytes, 0, 8);
@@ -1366,7 +1369,7 @@ void event_transmission_adaptation(struct genie_widget *widget)
 {
   CAN_FRAME out;
 
-//  if (debug_print)
+  if (debug_print)
     SerialEx.printf("Transmission adaptation\n");
 
   memset(out.data.bytes, 0, 8);
@@ -1480,7 +1483,6 @@ void setup_eeprom(genie_display *display)
   bool en;
 
   current_screen = eeprom_load(EEPROM_CURRENT_SCREEN, 0) % display->max_screen;
-  SerialEx.printf("current_screen = %d\n", current_screen);
 
   en = eeprom_load(EEPROM_CAN_POLL, 1);
   set_widget(display, "Can poll", en);
