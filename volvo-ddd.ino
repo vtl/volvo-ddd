@@ -1384,7 +1384,7 @@ void event_key_cycle(struct genie_widget *widget)
 void event_goto_screen(struct genie_widget *widget)
 {
   dprintf("event goto screen %d\n", widget->object_index);
-  current_screen = widget->object_index;
+  genie_set_screen(widget->object_index);
 }
 
 void set_can_poll(struct car *car, bool en)
