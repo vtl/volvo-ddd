@@ -9,8 +9,8 @@
 #define RSE_RIGHT_DISPLAY_EN_PIN 0
 
 #define CAN_LS_CS_PIN		 26
-#define CAN_LS_INT_PIN		  2
+#define CAN_LS_INT_PIN		  4
 #define CAN_HS_CS_PIN		 27
 #define CAN_HS_INT_PIN		 15
 #define CAN_RSE_L_CS_PIN	 21
-#define CAN_RSE_R_CS_PIN	 17
+#define CAN_RSE_R_CS_PIN	 22

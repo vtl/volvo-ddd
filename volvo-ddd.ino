@@ -13,10 +13,10 @@ int debug_print = 1;
 
 #include <genieArduino.h>
 #include <Preferences.h>
-#include "esp32/pins.h"
-#include "esp32/can.h"
-#include "esp32/eeprom.h"
-#include "esp32/timer.h"
+#include "hw/esp32/pins.h"
+#include "hw/esp32/can.h"
+#include "hw/esp32/eeprom.h"
+#include "hw/esp32/timer.h"
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -727,10 +727,10 @@ void setup_canbus(struct car *car)
 
   printf("setup CAN-bus...\n");
 
-  CAN_LS.cs_pin = 5;
-  CAN_LS.int_pin = 37;
-  CAN_HS.cs_pin = 2;
-  CAN_HS.int_pin = 36;
+  CAN_LS.cs_pin = CAN_LS_CS_PIN;
+  CAN_LS.int_pin = CAN_LS_INT_PIN;
+  CAN_HS.cs_pin = CAN_HS_CS_PIN;
+  CAN_HS.int_pin = CAN_HS_INT_PIN;
 
   car->can_hs_ok = CAN_HS.begin(car->can_hs_rate);
   car->can_ls_ok = CAN_LS.begin(car->can_ls_rate);
@@ -1444,7 +1444,7 @@ void setup()
   Serial.begin(115200);
   printf("start\n");
   printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
-  
+
   setup_car(&my_car);
   setup_radio(&my_radio);
   setup_canbus(&my_car);
