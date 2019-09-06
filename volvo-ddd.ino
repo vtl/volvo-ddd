@@ -1239,8 +1239,8 @@ void swm_audio_controls_cb(struct sensor *sensor)
 void cem_ambient_light_cb(struct sensor *sensor)
 {
   int level = get_sensor_value(sensor, 1);
-  radio_event(&my_radio, RADIO_EVENT_ILLUMI, level);
-  my_display.light_level = level ? 15 : 5;
+  radio_event(&my_radio, RADIO_EVENT_ILLUMI, level != 0xf);
+  my_display.light_level = level;
 }
 
 void tcm_gearbox_position_cb(struct sensor *sensor)

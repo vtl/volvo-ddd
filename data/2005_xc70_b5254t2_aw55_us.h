@@ -139,7 +139,7 @@ void car_init(struct car * car)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, CEM, "CEM", 0x00, 0x02803008, CAN_LS, UNIFRAME);
-  DECLARE_SENSOR(car, CEM, CEM_AMBIENT_LIGHT,        "Ambient light",       ARRAY(0), VALUE_INT, (sensor->value.v_int = !!(bytes[3] >> 4)));
+  DECLARE_SENSOR(car, CEM, CEM_AMBIENT_LIGHT,        "Ambient light",       ARRAY(0), VALUE_INT, (sensor->value.v_int = (bytes[4] & 0xf)));
   SET_SENSOR_PARAM(car, CEM, CEM_AMBIENT_LIGHT, ack_cb, cem_ambient_light_cb);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
