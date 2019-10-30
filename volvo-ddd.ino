@@ -7,6 +7,13 @@
 */
 
 int debug_print = 1;
+bool can_print = false;
+
+#define dprintf(fmt, arg...) \
+  do { \
+    if (can_print) \
+      printf(fmt, ##arg); \
+  } while (0)
 
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
@@ -17,6 +24,8 @@ int debug_print = 1;
 #include "hw/esp32/can.h"
 #include "hw/esp32/eeprom.h"
 #include "hw/esp32/timer.h"
+
+#define genieSerial Serial
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -365,16 +374,16 @@ bool widget_update(struct genie_widget *widget, bool force)
 
 void reset_display(struct genie_display *display)
 {
-  printf("Resetting 4DSystems LCD... \n");
-  Serial2.begin(200000);
-  display->genie.Begin(Serial2);
+  dprintf("Resetting 4DSystems LCD... \n");
+  genieSerial.begin(200000);
+  display->genie.Begin(genieSerial);
   display->genie.AttachEventHandler(display_event_callback);
   display->ready = false;
   display->current_screen = 0;
   pinMode(LCD_RESET_PIN, OUTPUT);
-  digitalWrite(LCD_RESET_PIN, LOW);
+  digitalWrite(LCD_RESET_PIN, LCD_RESET_LEVEL);
   delay(100);
-  digitalWrite(LCD_RESET_PIN, HIGH);
+  digitalWrite(LCD_RESET_PIN, !LCD_RESET_LEVEL);
   display->init_started_ms = millis();
 }
 
@@ -412,7 +421,7 @@ void refresh_display(struct genie_display *display, int screen)
     }
 
     if (screen != display->current_screen && screen >= 0 && screen <= display->max_screen) {
-      printf("changing screen to %d\n", screen);
+      dprintf("changing screen to %d\n", screen);
       display->genie.WriteObject(GENIE_OBJ_FORM, screen, 0);
       display->current_screen = screen;
       force = true;
@@ -422,7 +431,7 @@ do_widgets:
   for (int i = 0; i < display->widget_count; i++) {
     if (display->widget[i].screen == display->current_screen) {
       if (!widget_update(&display->widget[i], force)) {
-            reset_display(display);
+        reset_display(display);
       }
     }
   }
@@ -481,10 +490,10 @@ void watchdog_reset() // should be called from interrupt handler
 void print_frame(const char *s, CAN_FRAME *in)
 {
   if (debug_print) {
-    printf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
+    dprintf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
     for (int i = 0; i < 8; i++)
-      printf("0x%02x ", in->data.byte[i]);
-    printf("\n");
+      dprintf("0x%02x ", in->data.byte[i]);
+    dprintf("\n");
   }
 }
 
@@ -492,8 +501,8 @@ void dump_array(const unsigned char *p, int len)
 {
   if (debug_print) {
     for (int i = 0; i < len; i++)
-      printf("0x%02x ", p[i]);
-    printf("\n");
+      dprintf("0x%02x ", p[i]);
+    dprintf("\n");
   }
 }
 
@@ -611,7 +620,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
 
   sensor = guess_sensor_by_reply(&my_car, in);
   if (!sensor) {
-//    print_frame("unknown CAN frame", in);
+    print_frame("unknown CAN frame", in);
     return;
   }
 
@@ -713,11 +722,19 @@ void can_callback1(CAN_FRAME *in)
 void canbus_read(struct car *car)
 {
   CAN_FRAME in;
-
-  if (CAN_HS.read(in))
+  byte ret;
+/*
+  ret = CAN_HS.read(in);
+  if (ret == CAN_OK)
     can_callback_multiframe((char *)"CAN HS", &in);
-  if (CAN_LS.read(in))
+  else if (ret != CAN_NOMSG)
+    dprintf("CAN_HS read error %d\n", ret);
+*/
+  ret = CAN_LS.read(in);
+  if (ret == CAN_OK)
     can_callback_multiframe((char *)"CAN LS", &in);
+  else if (ret != CAN_NOMSG)
+    dprintf("CAN_LS read error %d\n", ret);
 }
 
 void setup_canbus(struct car *car)
@@ -725,7 +742,7 @@ void setup_canbus(struct car *car)
   module_t *module;
   int i;
 
-  printf("setup CAN-bus...\n");
+  dprintf("setup CAN-bus...\n");
 
   CAN_LS.cs_pin = CAN_LS_CS_PIN;
   CAN_LS.int_pin = CAN_LS_INT_PIN;
@@ -743,8 +760,8 @@ void setup_canbus(struct car *car)
 //  CAN_HS.setGeneralCallback(can_callback0);
 //  CAN_LS.setGeneralCallback(can_callback1);
 
-  printf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
-  printf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
+  dprintf("CAN HS: %s\n", car->can_hs_ok ? "done" : "failed");
+  dprintf("CAN LS: %s\n", car->can_ls_ok ? "done" : "failed");
 }
 
 #include CAR
@@ -753,14 +770,14 @@ void setup_car(struct car *car)
 {
   car_init(car);
 
-  pinMode(RSE_LEFT_DISPLAY_EN_PIN, OUTPUT);
-//  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, HIGH);
-  pinMode(RSE_RIGHT_DISPLAY_EN_PIN, OUTPUT);
-//  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, HIGH);
+//  pinMode(RSE_LEFT_DISPLAY_EN_PIN, OUTPUT);
+////  digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, HIGH);
+//  pinMode(RSE_RIGHT_DISPLAY_EN_PIN, OUTPUT);
+////  digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, HIGH);
 
   loop_now = millis();
 
-  printf("setup %s... done\n", car->name);
+  dprintf("setup %s... done\n", car->name);
 }
 
 void query_sensor(struct sensor *sensor)
@@ -780,7 +797,7 @@ void query_sensor(struct sensor *sensor)
   out.data.byte[1] = sensor->module->req_id;
   for (int i = 0; i < sensor->request_size; i++)
     out.data.byte[2 + i] = sensor->request_data[i];
-  //  print_frame("OUT", &out);
+  print_frame("OUT", &out);
   sensor->module->canbus->sendFrame(out);
 }
 
@@ -1228,7 +1245,7 @@ void display_event_callback(void)
         struct genie_widget *widget = &display->widget[i];
         widget->current_value = display->genie.GetEventData(&Event);
 
-        //if (debug_print)
+        if (debug_print)
           printf("input %s data %d\n", widget->name, widget->current_value);
         if (widget->cb_fn)
           widget->cb_fn(widget);
@@ -1244,7 +1261,7 @@ void rse_left_display_en(bool en)
   if (inited && (en == last_state))
     return;
   last_state = en;
-  printf("left display %d\n", en);
+  dprintf("left display %d\n", en);
   digitalWrite(RSE_LEFT_DISPLAY_EN_PIN, !en);
   eeprom_store(EEPROM_RSE_LEFT_EN, en);
 }
@@ -1256,26 +1273,26 @@ void rse_right_display_en(bool en)
   if (inited && (en == last_state))
     return;
   last_state = en;
-  printf("right display %d\n", en);
+  dprintf("right display %d\n", en);
   digitalWrite(RSE_RIGHT_DISPLAY_EN_PIN, !en);
   eeprom_store(EEPROM_RSE_RIGHT_EN, en);
 }
 
 void event_gps_navigation(struct genie_widget *widget)
 {
-  printf("event GPS nav\n");
+  dprintf("event GPS nav\n");
   rti_en(widget->current_value);
 }
 
 void event_left_display(struct genie_widget *widget)
 {
-  printf("event left display\n");
+  dprintf("event left display\n");
   rse_left_display_en(widget->current_value);
 }
 
 void event_right_display(struct genie_widget *widget)
 {
-  printf("event right display\n");
+  dprintf("event right display\n");
   rse_right_display_en(widget->current_value);
 }
 
@@ -1283,8 +1300,7 @@ void event_sri_reset(struct genie_widget *widget)
 {
   CAN_FRAME out;
 
-//  if (debug_print)
-    printf("SRI reset\n");
+  dprintf("SRI reset\n");
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -1305,8 +1321,7 @@ void event_transmission_adaptation(struct genie_widget *widget)
 {
   CAN_FRAME out;
 
-//  if (debug_print)
-    printf("Transmission adaptation\n");
+  dprintf("Transmission adaptation\n");
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -1325,7 +1340,7 @@ void event_transmission_adaptation(struct genie_widget *widget)
 
 void event_can_poll(struct genie_widget *widget)
 {
-  printf("event CAN poll\n");
+  dprintf("event CAN poll\n");
 
   if (widget->current_value != widget->display->car->can_poll) {
     set_can_poll(widget->display->car, !!widget->current_value);
@@ -1419,7 +1434,7 @@ void setup_eeprom(genie_display *display)
   eeprom_init();
 
   current_screen = eeprom_load(EEPROM_CURRENT_SCREEN, 0) % display->max_screen;
-  printf("current_screen = %d\n", current_screen);
+  dprintf("current_screen = %d\n", current_screen);
 
   en = eeprom_load(EEPROM_CAN_POLL, 1);
   set_widget(display, "Can poll", en);
@@ -1436,18 +1451,24 @@ void setup_eeprom(genie_display *display)
   en = eeprom_load(EEPROM_RTI_EN, 0);
   set_widget(&my_display, "GPS navigation", en);
   rti_en(en);
-
 }
 
 void setup()
 {
   Serial.begin(115200);
-  printf("start\n");
-  printf("watchdog timeout %d ms\n", WDT_TIMEOUT);
+  can_print = true;
+  dprintf("start\n");
+  dprintf("watchdog timeout %d ms\n", WDT_TIMEOUT);
 
   setup_car(&my_car);
   setup_radio(&my_radio);
   setup_canbus(&my_car);
+
+  can_print = false;
+/* 
+ * NOTE no more printing beyond this point
+ * The only RX/TX is taken by LCD
+ */
   setup_genie_display(&my_display, &my_car);
   setup_eeprom(&my_display);
 }

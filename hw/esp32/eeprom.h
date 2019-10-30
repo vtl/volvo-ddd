@@ -19,12 +19,12 @@ unsigned char eeprom_load(const char *property, unsigned char def)
   unsigned char value;
 
   value = preferences.getUChar(property, def);
-  printf("load property %s, got value %d\n", property, value);
+  dprintf("load property %s, got value %d\n", property, value);
   return value;
 }
 
 void eeprom_store(const char *property, unsigned char value)
 {
-  printf("store property %s value %d\n", property, value);
+  dprintf("store property %s value %d\n", property, value);
   preferences.putUChar(property, value);
 }

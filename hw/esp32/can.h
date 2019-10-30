@@ -23,11 +23,12 @@ typedef struct {
   MCP_CAN can;
   uint8_t cs_pin;
   uint8_t int_pin;
+  byte filt_idx = 0;
   void(*cb)(CAN_FRAME *);
   bool begin(uint8_t rate);
-  bool read(CAN_FRAME &in);
+  byte read(CAN_FRAME &in);
   void sendFrame(CAN_FRAME& out);
-  void setRXFilter(int can_id, uint32_t mask, bool extended);
+  void setRXFilter(uint32_t can_id, uint32_t mask, bool extended);
   void setGeneralCallback(void(*fn)(CAN_FRAME *));
   void isr(void);
 } CANRaw;
@@ -37,6 +38,7 @@ CANRaw CAN_LS;
 
 bool CANRaw::begin(uint8_t rate)
 {
+  dprintf("CS %d rate %d\n", cs_pin, rate);
   can.init_CS(cs_pin);
   return can.begin(rate, MCP_8MHz) == MCP2515_OK;
 }
@@ -55,17 +57,12 @@ void CANRaw::isr(void)
 {
   CAN_FRAME in;
 
-  printf("ISR\n");
+  dprintf("ISR\n");
 
   while (can.readMsgBuf(&in.length, in.data.bytes)) {
     if (cb)
       cb(&in);
   }
-}
-
-bool CANRaw::read(CAN_FRAME &in)
-{
-  return can.readMsgBuf(&in.length, in.data.bytes);
 }
 
 void CANRaw::setGeneralCallback(void(*fn)(CAN_FRAME *))
@@ -74,19 +71,33 @@ void CANRaw::setGeneralCallback(void(*fn)(CAN_FRAME *))
   attachInterrupt(digitalPinToInterrupt(int_pin), (this == &CAN_HS) ? can_hs_isr : can_ls_isr, FALLING);
 }
 
-void CANRaw::setRXFilter(int can_id, uint32_t mask, bool extended)
+void CANRaw::setRXFilter(uint32_t can_id, uint32_t mask, bool extended)
 {
-  printf("%s stub can_id 0x%x, mask 0x%x, extended %d\n", __func__, can_id, mask, extended);
+  dprintf("%s filt %d, can_id 0x%x, mask 0x%x, extended %d\n", __func__, filt_idx, can_id, mask, extended);
+// FIXME don't set masks every time
+  can.init_Mask(0, extended, mask);
+  can.init_Mask(1, extended, mask);
+  can.init_Filt(filt_idx++, extended, can_id);
 }
 
 void CANRaw::sendFrame(CAN_FRAME& out)
 {
   int ret = can.sendMsgBuf(out.id, out.extended, 8, out.data.bytes);
   if (ret != CAN_OK)
-    printf("sendFrame error\n");
+    dprintf("sendFrame error\n");
 }
 
 byte can_read(struct MCP_CAN *can, CAN_FRAME *in)
 {
-  return can->readMsgBufID(can->readRxTxStatus(), (volatile unsigned long *)&in->id, &in->extended, &in->rtr, &in->length, in->data.bytes);
+  byte ret;
+
+  ret = can->checkReceive();
+  if (ret == CAN_MSGAVAIL)
+    ret = can->readMsgBufID( can->readRxTxStatus(), (volatile unsigned long *)&in->id, &in->extended, &in->rtr, &in->length, in->data.bytes);
+  return ret;
+}
+
+byte CANRaw::read(CAN_FRAME &in)
+{
+  return can_read(&can, &in);
 }
