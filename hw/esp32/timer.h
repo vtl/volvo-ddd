@@ -1,4 +1,5 @@
 struct timer {
+  byte idx;
   hw_timer_t *t = NULL;
   timer() {};
   timer(unsigned char idx);
@@ -10,16 +11,16 @@ struct timer {
   void arm(void(*fn)(void), unsigned int delay, bool periodic);
 };
 
-timer::timer(unsigned char idx)
+timer::timer(unsigned char _idx)
 {
-  init(idx);
+  init(_idx);
 }
 
-bool timer::init(unsigned char idx)
+bool timer::init(unsigned char _idx)
 {
-  if (idx >= 4)
+  if (_idx >= 4)
     return false;
-  t = timerBegin(idx, 80, true);
+  idx = _idx;
   return true;
 }
 
@@ -45,6 +46,7 @@ void timer::stop(void)
 
 void timer::arm(void(*fn)(void), unsigned int delay, bool periodic)
 {
+  t = timerBegin(idx, 80, true);
   attach_interrupt(fn);
   set_delay(delay, periodic);
   start();
