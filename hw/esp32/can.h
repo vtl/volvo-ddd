@@ -82,7 +82,7 @@ void CANRaw::setRXFilter(uint32_t can_id, uint32_t mask, bool extended)
 
 void CANRaw::sendFrame(CAN_FRAME& out)
 {
-  int ret = can.sendMsgBuf(out.id, out.extended, 8, out.data.bytes);
+  int ret = can.sendMsgBuf(out.id, out.extended, 8, out.data.bytes, true);
   if (ret != CAN_OK)
     dprintf("sendFrame error\n");
 }
