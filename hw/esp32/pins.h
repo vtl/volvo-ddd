@@ -16,3 +16,6 @@
 #define CAN_RSE_R_CS_PIN	 22
 
 #define LCD_RESET_LEVEL		HIGH
+
+#define CAN_HS_CLK		MCP_16MHz
+#define CAN_LS_CLK		MCP_8MHz

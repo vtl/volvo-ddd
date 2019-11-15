@@ -752,10 +752,12 @@ void setup_canbus(struct car *car)
 
   dprintf("setup CAN-bus...\n");
 
-  CAN_LS.cs_pin = CAN_LS_CS_PIN;
+  CAN_LS.cs_pin  = CAN_LS_CS_PIN;
   CAN_LS.int_pin = CAN_LS_INT_PIN;
-  CAN_HS.cs_pin = CAN_HS_CS_PIN;
+  CAN_LS.clk     = CAN_LS_CLK;
+  CAN_HS.cs_pin  = CAN_HS_CS_PIN;
   CAN_HS.int_pin = CAN_HS_INT_PIN;
+  CAN_HS.clk     = CAN_HS_CLK;
 
   car->can_hs_ok = CAN_HS.begin(car->can_hs_rate);
   car->can_ls_ok = CAN_LS.begin(car->can_ls_rate);

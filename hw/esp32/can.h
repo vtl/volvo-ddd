@@ -23,6 +23,7 @@ typedef struct {
   MCP_CAN can;
   uint8_t cs_pin;
   uint8_t int_pin;
+  int clk;
   byte filt_idx = 0;
   void(*cb)(CAN_FRAME *);
   bool begin(uint8_t rate);
@@ -41,7 +42,7 @@ bool CANRaw::begin(uint8_t rate)
 {
   dprintf("CS %d rate %d\n", cs_pin, rate);
   can.init_CS(cs_pin);
-  return can.begin(rate, MCP_8MHz) == MCP2515_OK;
+  return can.begin(rate, clk) == MCP2515_OK;
 }
 
 void can_hs_isr(void)
