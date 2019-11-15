@@ -31,6 +31,7 @@ typedef struct {
   void setRXFilter(uint32_t can_id, uint32_t mask, bool extended);
   void setGeneralCallback(void(*fn)(CAN_FRAME *));
   void isr(void);
+  const char *strerror(int);
 } CANRaw;
 
 CANRaw CAN_HS;
@@ -84,7 +85,7 @@ void CANRaw::sendFrame(CAN_FRAME& out)
 {
   int ret = can.sendMsgBuf(out.id, out.extended, 8, out.data.bytes, true);
   if (ret != CAN_OK)
-    dprintf("sendFrame error\n");
+    dprintf("sendFrame error: %s (%d)\n", CANRaw::strerror(ret), ret);
 }
 
 byte can_read(struct MCP_CAN *can, CAN_FRAME *in)
@@ -100,4 +101,27 @@ byte can_read(struct MCP_CAN *can, CAN_FRAME *in)
 byte CANRaw::read(CAN_FRAME &in)
 {
   return can_read(&can, &in);
+}
+
+static struct _can_errors {
+  int code;
+  const char *msg;
+} can_errors[] = {
+  { CAN_OK, "CAN_OK" },
+  { CAN_FAILINIT, "CAN_FAILINIT" },
+  { CAN_FAILTX, "CAN_FAILTX" },
+  { CAN_MSGAVAIL, "CAN_MSGAVAIL" },
+  { CAN_NOMSG, "CAN_NOMSG" },
+  { CAN_CTRLERROR, "CAN_CTRLERROR" },
+  { CAN_GETTXBFTIMEOUT, "CAN_GETTXBFTIMEOUT" },
+  { CAN_SENDMSGTIMEOUT, "CAN_SENDMSGTIMEOUT" },
+  { CAN_FAIL, "CAN_FAIL" }};
+
+const char *CANRaw::strerror(int code)
+{
+  for(int i = 0; i < sizeof(can_errors) / sizeof(struct _can_errors); i++)
+    if (code == can_errors[i].code)
+      return can_errors[i].msg;
+
+  return "?";
 }
