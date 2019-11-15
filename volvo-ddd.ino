@@ -6,11 +6,12 @@
    (c) 2016-2019 Vitaly Mayatskikh <vitaly@gravicappa.info>
 */
 
-int debug_print = 1;
+int debug_print = 0;
 
 #define dprintf(fmt, arg...) \
   do { \
-    printf(fmt, ##arg); \
+    if (debug_print) \
+      printf(fmt, ##arg); \
   } while (0)
 
 #define WIDGETS "data/widgets.h"
@@ -320,31 +321,26 @@ bool widget_update(struct genie_widget *widget, bool force)
   new_value = widget->val_fn(widget);
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
-      if (debug_print)
-        printf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
+      dprintf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
       new_value = widget->min_value;
     } else if (new_value > widget->max_value) {
-      if (debug_print)
-        printf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
+      dprintf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
       new_value = widget->max_value;
     }
   }
   if (force || new_value != widget->last_value) {
-    if (debug_print)
-      printf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
+    dprintf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
     long ms = millis();
 
     if (widget->object_type == GENIE_OBJ_STRING) {
-      if (debug_print)
-        printf("string %d == '%s'\n", widget->object_index, (char *)new_value);
+      dprintf("string %d == '%s'\n", widget->object_index, (char *)new_value);
       widget->display->genie.WriteStr(widget->object_index, (char *)new_value);
     } else {
       widget->display->genie.WriteObject(widget->object_type, widget->object_index, new_value);
     }
     widget->last_value = new_value;
     
-    if (debug_print)
-      printf("widget %s update took %d ms\n", widget->name, millis() - ms);
+    dprintf("widget %s update took %d ms\n", widget->name, millis() - ms);
 
     if (millis() - ms > 500)
       return false;
@@ -498,10 +494,8 @@ void watchdog_reset() // should be called from interrupt handler
 void print_frame(const char *s, CAN_FRAME *in)
 {
   if (debug_print) {
-    dprintf("CAN_FRAME for %s ID 0x%lx: ", s, in->id);
-    for (int i = 0; i < 8; i++)
-      dprintf("0x%02x ", in->data.byte[i]);
-    dprintf("\n");
+    printf("CAN_FRAME %s ID 0x%lx: ", s, in->id);
+    dump_array(in->data.bytes, 8);
   }
 }
 
@@ -509,8 +503,8 @@ void dump_array(const unsigned char *p, int len)
 {
   if (debug_print) {
     for (int i = 0; i < len; i++)
-      dprintf("0x%02x ", p[i]);
-    dprintf("\n");
+      printf("0x%02x ", p[i]);
+    printf("\n");
   }
 }
 
@@ -540,8 +534,7 @@ struct module *find_module_by_id(struct car *car, int module_id)
   for (int m = 0; m < car->module_count; m++)
     if (car->module[m].id == module_id)
       return &car->module[m];
-  if (debug_print)
-    printf("can't find module by id %d\n", module_id);
+  dprintf("can't find module by id %d\n", module_id);
 
   return NULL;
 }
@@ -551,8 +544,7 @@ struct module *find_module_by_can_id(struct car *car, unsigned long can_id)
   for (int m = 0; m < car->module_count; m++)
     if (car->module[m].can_id == can_id)
       return &car->module[m];
-  if (debug_print)
-    printf("can't find module by can_id %d\n", can_id);
+  dprintf("can't find module by can_id %d\n", can_id);
 
   return NULL;
 }
@@ -564,8 +556,7 @@ struct sensor *find_sensor_by_id(struct module *module, int sensor_id)
   for (int s = 0; s < module->sensor_count; s++)
     if (module->sensor[s].id == sensor_id)
       return &module->sensor[s];
-  if (debug_print)
-    printf("%s can't find sensor by id %d\n", module->name, sensor_id);
+  dprintf("%s can't find sensor by id %d\n", module->name, sensor_id);
 
   return NULL;
 }
@@ -595,18 +586,17 @@ struct sensor *guess_sensor_by_reply(struct car *car, CAN_FRAME *in)
   return NULL;
 }
 
-void can_callback(CAN_FRAME *in)
+void can_callback(const char *msg, CAN_FRAME *in)
 {
   sensor_t *sensor = guess_sensor_by_reply(&my_car, in);
 
   if (!sensor) {
-    print_frame("unknown CAN frame", in);
+    print_frame("unknown id", in);
     return;
   }
 
-  print_frame("CAN frame", in);
-  if (debug_print)
-    printf("got sensor %s:%s\n", sensor->module->name, sensor->name);
+  print_frame(msg, in);
+  dprintf("got sensor %s:%s\n", sensor->module->name, sensor->name);
 
   if (sensor->convert_fn)
     sensor->convert_fn(sensor, in->data.bytes, in->length);
@@ -628,12 +618,12 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
 
   sensor = guess_sensor_by_reply(&my_car, in);
   if (!sensor) {
-    print_frame("unknown CAN frame", in);
+    print_frame("unknown", in);
     return;
   }
 
   if (sensor->module->frame_type == UNIFRAME) {
-    can_callback(in);
+    can_callback(msg, in);
     return;
   }
 
@@ -661,35 +651,26 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     return;
 
   if (module->rcv_idx + len >= sizeof(module->rcv_data)) {
-    if (debug_print) {
-      printf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, sizeof(module->rcv_data));
-    }
+    dprintf("dropped multiframe with len %d > %d\n", module->rcv_idx + len, sizeof(module->rcv_data));
     goto out;
   }
 
   if (offset > 8) {
-    if (debug_print) {
-      printf("offset %d > 8\n", offset);
-    }
+    dprintf("offset %d > 8\n", offset);
     goto out;
   }
 
   if (len < 0) {
-    if (debug_print) {
-      printf("len %d < 0\n", len);
-    }
+    dprintf("len %d < 0\n", len);
     goto out;
   }
 
   if (offset > len) {
-    if (debug_print) {
-      printf("offset %d > len %d\n", offset, len);
-    }
+    dprintf("offset %d > len %d\n", offset, len);
     goto out;
   }
 
-  if (debug_print)
-    printf("idx %d, len %d\n", module->rcv_idx, len);
+  dprintf("idx %d, len %d\n", module->rcv_idx, len);
   memcpy(module->rcv_data + module->rcv_idx, in->data.bytes + offset, len - offset);
   module->rcv_idx += len - offset;
 
@@ -697,8 +678,7 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     return;
   }
 
-  if (debug_print)
-    printf("got sensor %s\n", sensor->name);
+  dprintf("got sensor %s\n", sensor->name);
 
   if (debug_print)
     dump_array(module->rcv_data, module->rcv_idx);
@@ -719,12 +699,12 @@ out:
 
 void can_callback0(CAN_FRAME *in)
 {
-  can_callback_multiframe((char *)"CAN HS", in);
+  can_callback_multiframe((char *)"HS RX", in);
 }
 
 void can_callback1(CAN_FRAME *in)
 {
-  can_callback_multiframe((char *)"CAN LS", in);
+  can_callback_multiframe((char *)"LS RX", in);
 }
 
 void canbus_read(struct car *car)
@@ -734,13 +714,13 @@ void canbus_read(struct car *car)
 /*
   ret = CAN_HS.read(in);
   if (ret == CAN_OK)
-    can_callback_multiframe((char *)"CAN HS", &in);
+    can_callback_multiframe((char *)"HS RX", &in);
   else if (ret != CAN_NOMSG)
     dprintf("CAN_HS read error %d\n", ret);
 */
   ret = CAN_LS.read(in);
   if (ret == CAN_OK)
-    can_callback_multiframe((char *)"CAN LS", &in);
+    can_callback_multiframe((char *)"LS RX", &in);
   else if (ret != CAN_NOMSG)
     dprintf("CAN_LS read error %d\n", ret);
 }
@@ -794,8 +774,7 @@ void query_sensor(struct sensor *sensor)
 {
   CAN_FRAME out;
 
-  if (debug_print)
-    printf("query %s:%s\n", sensor->module->name, sensor->name);
+  dprintf("query %s:%s\n", sensor->module->name, sensor->name);
 
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
@@ -807,7 +786,7 @@ void query_sensor(struct sensor *sensor)
   out.data.byte[1] = sensor->module->req_id;
   for (int i = 0; i < sensor->request_size; i++)
     out.data.byte[2 + i] = sensor->request_data[i];
-  print_frame("OUT", &out);
+  print_frame(sensor->module->canbus == &CAN_HS ? "HS TX" : "LS TX", &out);
   sensor->module->canbus->sendFrame(out);
 }
 
@@ -1208,8 +1187,7 @@ void radio_event(struct radio *radio, int function, int param)
   for (int i = 0; i < radio->commands; i++) {
     struct radio_command *command = &radio->command[i];
     if ((command->function == function) && command->match_fn(param)) {
-      if (debug_print)
-        printf("key pressed: %s\n", command->name);
+      dprintf("key pressed: %s\n", command->name);
       command->fn(command);
     }
   }
@@ -1272,8 +1250,7 @@ void display_event_callback(void)
         struct genie_widget *widget = &display->widget[i];
         widget->current_value = display->genie.GetEventData(&Event);
 
-        if (debug_print)
-          printf("input %s data %d\n", widget->name, widget->current_value);
+        dprintf("input %s data %d\n", widget->name, widget->current_value);
         if (widget->cb_fn)
           widget->cb_fn(widget);
       }
