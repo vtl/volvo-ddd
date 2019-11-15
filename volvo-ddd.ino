@@ -711,13 +711,13 @@ void canbus_read(struct car *car)
 {
   CAN_FRAME in;
   byte ret;
-/*
+
   ret = CAN_HS.read(in);
   if (ret == CAN_OK)
     can_callback_multiframe((char *)"HS RX", &in);
   else if (ret != CAN_NOMSG)
     dprintf("CAN_HS read error %d\n", ret);
-*/
+
   ret = CAN_LS.read(in);
   if (ret == CAN_OK)
     can_callback_multiframe((char *)"LS RX", &in);
