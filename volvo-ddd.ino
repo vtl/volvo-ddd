@@ -1013,8 +1013,6 @@ void radio_set_keypress_delay(struct radio *radio)
   radio->last_command_ms = 0;  
 }
 
-#define N 100
-
 void radio_send_bits(struct radio_command *command, const uint8_t bits[])
 {
   struct radio *radio = command->radio;
@@ -1043,14 +1041,14 @@ void radio_send_bits(struct radio_command *command, const uint8_t bits[])
   radio->cur_bit = 0;
   pinMode(radio->control_pin, OUTPUT);
   digitalWrite(radio->control_pin, !LOW);
-  radio->timer.arm(radio_isr_send_start, 10000 - N, false);
+  radio->timer.arm(radio_isr_send_start, 10000, false);
 }
 
 void radio_isr_send_start()
 {
   struct radio *radio = &my_radio;
   digitalWrite(radio->control_pin, !HIGH);
-  radio->timer.arm(radio_isr_send_bit, 4500 - N, false);
+  radio->timer.arm(radio_isr_send_bit, 4500, false);
 }
 
 void radio_isr_send_bit()
@@ -1058,7 +1056,7 @@ void radio_isr_send_bit()
   struct radio *radio = &my_radio;
 
   digitalWrite(radio->control_pin, !radio->data[radio->cur_bit++]);
-  radio->timer.arm(radio_isr_send_bit_finish, 1000 - N, false);
+  radio->timer.arm(radio_isr_send_bit_finish, 1000, false);
 }
 
 void radio_isr_send_bit_finish()
@@ -1070,7 +1068,7 @@ void radio_isr_send_bit_finish()
   if (radio->cur_bit == 50)
     radio_isr_stop();
   else
-    radio->timer.arm(radio_isr_send_bit, 200 - N, false);
+    radio->timer.arm(radio_isr_send_bit, 200, false);
 }
 
 void radio_isr_stop()
