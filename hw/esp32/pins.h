@@ -1,5 +1,5 @@
 #define LCD_RESET_PIN		  4 // 5v
-#define SWC_PIN			 16 // 5v
+#define SWC_PIN			  2 // was 16 // 5v
 #define RTI_PIN			 32 // 5v
 #define ILLUMI_PIN		 33 // 12v
 #define CAMERA_PIN		 25 // 12v
