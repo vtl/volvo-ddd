@@ -7,12 +7,10 @@
 */
 
 int debug_print = 1;
-bool can_print = false;
 
 #define dprintf(fmt, arg...) \
   do { \
-    if (can_print) \
-      printf(fmt, ##arg); \
+    printf(fmt, ##arg); \
   } while (0)
 
 #define WIDGETS "data/widgets.h"
@@ -24,8 +22,6 @@ bool can_print = false;
 #include "hw/esp32/can.h"
 #include "hw/esp32/eeprom.h"
 #include "hw/esp32/timer.h"
-
-#define genieSerial Serial
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -39,6 +35,7 @@ float temp_c_to_f(float c)
 #define WDT_TIMEOUT 1500
 
 Genie genie;
+#define genieSerial Serial2
 
 /*
    known modules
@@ -1456,19 +1453,12 @@ void setup_eeprom(genie_display *display)
 void setup()
 {
   Serial.begin(115200);
-  can_print = true;
   dprintf("start\n");
   dprintf("watchdog timeout %d ms\n", WDT_TIMEOUT);
 
   setup_car(&my_car);
   setup_radio(&my_radio);
   setup_canbus(&my_car);
-
-  can_print = false;
-/* 
- * NOTE no more printing beyond this point
- * The only RX/TX is taken by LCD
- */
   setup_genie_display(&my_display, &my_car);
   setup_eeprom(&my_display);
 }
