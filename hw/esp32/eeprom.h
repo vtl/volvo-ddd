@@ -7,7 +7,7 @@ Preferences preferences;
 #define EEPROM_RSE_LEFT_EN    "RSE_LEFT_EN"
 #define EEPROM_RSE_RIGHT_EN   "RSE_RIGHT_EN"
 #define EEPROM_RTI_EN         "RTI_EN"
-
+#define EEPROM_KEY_CYCLE      "KEY_CYCLE"
 
 void eeprom_init()
 {

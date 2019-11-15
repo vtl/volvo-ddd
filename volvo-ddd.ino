@@ -979,6 +979,7 @@ typedef struct radio {
   const char *name;
   void setup(struct car *car);
   void event(struct car *car, int event, int);
+  bool key_cycle;
   int control_pin;
   int illumi_pin;
   int park_pin;
@@ -1348,6 +1349,17 @@ void event_can_poll(struct genie_widget *widget)
   }
 }
 
+void event_key_cycle(struct genie_widget *widget)
+{
+  dprintf("event key cycle (STUB)\n");
+}
+
+void event_goto_screen(struct genie_widget *widget)
+{
+  dprintf("event goto screen %d\n", widget->object_index);
+  current_screen = widget->object_index;
+}
+
 void set_can_poll(struct car *car, bool en)
 {
   if (car->can_poll != en)
@@ -1452,6 +1464,10 @@ void setup_eeprom(genie_display *display)
   en = eeprom_load(EEPROM_RTI_EN, 0);
   set_widget(&my_display, "GPS navigation", en);
   rti_en(en);
+
+  en = eeprom_load(EEPROM_KEY_CYCLE, 0);
+  set_widget(&my_display, "Key cycle", en);
+  my_radio.key_cycle = en;
 }
 
 void setup()
