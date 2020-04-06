@@ -14,6 +14,13 @@ int debug_print = 0;
       printf(fmt, ##arg); \
   } while (0)
 
+enum {
+  FRQ_NO = -1,
+  FRQ_LO = 2,
+  FRQ_ME = 3,
+  FRQ_HI = 4
+};
+
 #define WIDGETS "data/widgets.h"
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
@@ -32,8 +39,11 @@ float temp_c_to_f(float c)
   return c * 1.8 + 32;
 }
 
-#define LCD_RESET_DELAY 3500
+#define LCD_RESET_DELAY 5500
 #define WDT_TIMEOUT 1500
+#define SENSOR_LAST_USED_TIMEOUT 5000
+#define SENSOR_LAST_UPDATE_TIMEOUT 3000
+#define SENSOR_SUBSCRIBE_TIMEOUT 1000
 
 Genie genie;
 #define genieSerial Serial2
@@ -146,17 +156,19 @@ typedef struct sensor {
   uint8_t id;
   const char *name;
   struct module *module;
+  bool active;
   union {
     long v_int;
     float v_float;
     const char *v_string;
   } value;
   int value_type;
-  int update_interval;
   long last_update;
   long last_used;
+  long last_subscribed;
   uint8_t request_size;
   uint8_t *request_data;
+  uint8_t freq;
   bool (* match_fn)(struct sensor *, CAN_FRAME *) = NULL;
   void (* convert_fn)(struct sensor *, unsigned char *, int) = NULL;
   void (* ack_cb)(struct sensor *) = NULL;
@@ -172,14 +184,7 @@ typedef struct module {
   uint8_t req_id;
   uint32_t can_id;
   CANRaw *canbus;
-  int update_interval = 0;
-  int sensor_default_update_interval = 1000;
-  long last_update;
-  long max_wait = 50;
-  void (* ack_cb)(struct module *) = NULL;
-  bool acked = true;
   bool frame_type;
-  int last_sensor = 0;
   uint8_t sensor_count = 0;
   uint8_t rcv_data[256];
   unsigned int rcv_idx = 0;
@@ -196,9 +201,6 @@ typedef struct car {
   bool can_ls_ok = false;
   int can_hs_rate;
   int can_ls_rate;
-  long last_update;
-  bool acked = true;
-  void (* ack_cb)(struct car *) = NULL;
   int module_count = 0;
   module_t module[MAX_MODULES_PER_CAR];
 } car_t;
@@ -239,7 +241,7 @@ typedef struct car {
 
 #define ARRAY(...) {__VA_ARGS__}
 
-#define DECLARE_SENSOR(_car, _module_id, _id, _name, _req, _val_type, _fn)    \
+#define DECLARE_SENSOR(_car, _module_id, _id, _name, _req, _freq, _val_type, _fn)    \
   do {                  \
     struct module *module = find_module_by_id(_car, _module_id); \
     if (!module) \
@@ -247,6 +249,7 @@ typedef struct car {
     struct sensor *sensor = &module->sensor[module->sensor_count]; \
     assert(module->sensor_count < MAX_SENSORS_PER_MODULE); \
     sensor->id = _id; \
+    sensor->active = false; \
     static uint8_t req_##_module_id_##_id[] = _req;     \
     sensor->request_data = req_##_module_id_##_id; \
     sensor->request_size = sizeof(req_##_module_id_##_id); \
@@ -260,8 +263,9 @@ typedef struct car {
       default:   sensor->match_fn = match_always_fn; break; \
     } \
     sensor->convert_fn = [](struct sensor *sensor, unsigned char *bytes, int len) { _fn; }; \
-    sensor->update_interval = module->sensor_default_update_interval; \
-    sensor->last_used = millis(); \
+    sensor->last_used = -SENSOR_LAST_USED_TIMEOUT; \
+    sensor->last_update = -SENSOR_LAST_UPDATE_TIMEOUT; \
+    sensor->freq = _freq; \
     module->sensor_count++;       \
   } while (0)
 
@@ -561,14 +565,12 @@ struct sensor *find_sensor_by_id(struct module *module, int sensor_id)
   return NULL;
 }
 
-void module_serialize_queries(struct module *module)
+void convert_sensor_by_id(struct module *module, int sensor_id)
 {
-  module->acked = true;
-}
-
-void car_serialize_queries(struct car *car)
-{
-  car->acked = true;
+  struct sensor *s = find_sensor_by_id(module, sensor_id);
+  if (!s)
+    return;
+  s->convert_fn(s, NULL, 0);
 }
 
 struct sensor *guess_sensor_by_reply(struct car *car, CAN_FRAME *in)
@@ -602,10 +604,6 @@ void can_callback(const char *msg, CAN_FRAME *in)
     sensor->convert_fn(sensor, in->data.bytes, in->length);
   if (sensor->ack_cb)
     sensor->ack_cb(sensor);
-  if (sensor->module->ack_cb)
-    sensor->module->ack_cb(sensor->module);
-  if (sensor->module->car->ack_cb)
-    sensor->module->car->ack_cb(sensor->module->car);
   watchdog_reset();
 }
 
@@ -687,10 +685,6 @@ void can_callback_multiframe(char *msg, CAN_FRAME *in)
     sensor->convert_fn(sensor, module->rcv_data, module->rcv_idx);
   if (sensor->ack_cb)
     sensor->ack_cb(sensor);
-  if (sensor->module->ack_cb)
-    sensor->module->ack_cb(sensor->module);
-  if (sensor->module->car->ack_cb)
-    sensor->module->car->ack_cb(sensor->module->car);
   watchdog_reset();
 out:
   module->rcv_sensor = NULL;
@@ -770,12 +764,15 @@ void setup_car(struct car *car)
   dprintf("setup %s... done\n", car->name);
 }
 
-void query_sensor(struct sensor *sensor)
+void sensor_send_request(struct sensor *sensor, bool active)
 {
   CAN_FRAME out;
+  int i;
 
-  dprintf("query %s:%s\n", sensor->module->name, sensor->name);
+  dprintf("query %s:%s active:%d\n", sensor->module->name, sensor->name, active);
 
+  sensor->active = active;
+  
   memset(out.data.bytes, 0, 8);
   out.id = 0x0ffffe;
   out.extended = true;
@@ -784,121 +781,32 @@ void query_sensor(struct sensor *sensor)
 
   out.data.byte[0] = 0xc8 + sensor->request_size + 1;
   out.data.byte[1] = sensor->module->req_id;
-  for (int i = 0; i < sensor->request_size; i++)
+  for (i = 0; i < sensor->request_size; i++)
     out.data.byte[2 + i] = sensor->request_data[i];
+  out.data.byte[2 + i] = active ? sensor->freq : 0;
   print_frame(sensor->module->canbus == &CAN_HS ? "HS TX" : "LS TX", &out);
-  sensor->module->canbus->sendFrame(out);
-}
-
-/*
-   1 - can queue
-   0 - can't queue
-*/
-bool query_module_next_sensor(struct module *module)
-{
-  /*
-     something is wrong, module was not queried for too long. unblock and go
-  */
-  if ((millis() - module->last_update) > module->max_wait)
-    module->acked = true;
-  if (!module->car->acked)
-    return false;
-  /*
-     if module is serialized and previous query is in flight, return "can't queue"
-  */
-  if (module->ack_cb && !module->acked)
-    return false;
-
-  /*
-     if we poll module too often, return "can't queue"
-  */
-  if (module->req_id && /* no poll */
-      module->update_interval &&
-      ((millis() - module->last_update) < module->update_interval))
-    return false;
-
-  /*
-     all sensor queried
-  */
-  if (module->last_sensor >= module->sensor_count) {
-    module->last_sensor = 0;
-    return false;
-  }
-
-  sensor_t *sensor = &module->sensor[module->last_sensor];
-
-  /*
-     something is wrong, sensor was not queried for too long. unblock and go
-  */
-  if ((millis() - sensor->last_update) > 2 * sensor->update_interval)
-    sensor->acked = true;
-
-  /*
-     if sensor is serialized and previous query is in flight, return "can't queue"
-  */
-  if (!sensor->acked)
-    return false;
-
-  module->last_sensor++;
-
-  /*
-     if sensor is passive (sending updates itself) then return "can queue"
-  */
-  if (sensor->request_size == 1) {
-    switch (sensor->request_data[0]) {
-      case 1: sensor->convert_fn(sensor, NULL, 0); break;
-      default: break;
-    }
-    return true;
-  }
-  /*
-     if we poll sensor too often, return "can queue"
-  */
-  if (sensor->update_interval &&
-      ((millis() - sensor->last_update) < sensor->update_interval))
-    return true;
-
-  /*
-   * if sensor value was not used in last 5 seconds or more
-   */
-  if (millis() > sensor->last_used + 5000)
-    return true;
-
-  module->car->last_update = module->last_update = sensor->last_update = millis();
-
-  if (module->car->ack_cb)
-    module->car->acked = false;
-  if (module->ack_cb)
-    module->acked = false;
-  if (sensor->ack_cb)
-    sensor->acked = false;
-
-  query_sensor(sensor);
-
-  return true;
 }
 
 void query_all_sensors(struct car *car)
 {
-  static int m = 0;
+  struct module *m;
+  struct sensor *s;
+  int i, j;
 
-  if (!car->can_poll)
-    return;
-  /*
-     something is wrong, car was not queried for 0.1 second. unblock and go
-  */
-  if ((millis() - car->last_update > 100))
-    car->acked = true;
-
-  if (!car->acked)
-    return;
-
-  if (m >= car->module_count)
-    m = 0;
-
-  if (!query_module_next_sensor(&car->module[m])) /* one sensor per module per loop */
-    m++;
-  get_sensor_value(find_module_sensor_by_id(car, CCM, CCM_SWITCH_STATUS), 1); // FIXME no widgets need it, so keep it alive
+  for (i = 0; i < car->module_count; i++) {
+    m = &car->module[i];
+    for (j = 0; j < m->sensor_count; j++) {
+      s = &m->sensor[j];
+      if ((millis() > s->last_used + SENSOR_LAST_USED_TIMEOUT)) {
+        if (s->active)
+          sensor_send_request(s, false); // stop polling
+      } else if ((millis() > s->last_update + SENSOR_LAST_UPDATE_TIMEOUT) &&
+                 (millis() > s->last_subscribed + SENSOR_SUBSCRIBE_TIMEOUT)) {
+        s->last_subscribed = millis();
+        sensor_send_request(s, true); // start polling
+      }
+    }
+  }
 }
 
 long peek_sensor_value(struct sensor *sensor, float multiplier)
