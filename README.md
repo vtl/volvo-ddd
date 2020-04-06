@@ -57,8 +57,12 @@ See doc/ for more pics!
 
 # Hardware used:
 
-* Arduino Due
-* DUECANshield V1.2 - prototyping shield with dual CAN bus ports
-* 4D Systems uLCD-24PTU (+ programming cable)
+* ESP32 
+* 2 or 4 MCP2515-based CAN-adapters
+* 4D Systems gen4-uLCD-28PTU (+ programming cable) or any other 4D Systems display
 * ULN2003A (Darlington array, level converter)
-* 93C86 (EEPROM)
+* 2x CYT1076 (3.3v <> 5.v level shifter)
+
+Schematics: https://easyeda.com/v.mayatskih/volvo-ddd
+
+![pic](/doc/esp32.png)
