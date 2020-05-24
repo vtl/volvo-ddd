@@ -10,6 +10,7 @@
 
 int debug_print = 0;
 StreamEx SerialEx = Serial;//USB;
+int pcv = 0;
 
 //#define NO_CAN
 //#define NO_CAN_CALLBACK /* poll vs irq */
@@ -86,7 +87,9 @@ enum {
   ECM_FUEL_PRESSURE,
   ECM_ENGINE_SPEED,
   ECM_STFT,
-  ECM_LTFT,
+  ECM_LTFTL,
+  ECM_LTFTM,
+  ECM_LTFTH,
   ECM_FUEL_PUMP_DUTY,
   ECM_TCV_DUTY,
   ECM_THROTTLE_ANGLE,
@@ -339,6 +342,9 @@ bool widget_update(struct genie_widget *widget, bool force)
     return true;
 
   if (!widget->display->enabled)
+    return true;
+
+  if (widget->object_type == GENIE_OBJ_USERBUTTON)
     return true;
 
   new_value = widget->val_fn(widget);
@@ -1246,6 +1252,11 @@ void cem_ambient_light_cb(struct sensor *sensor)
 void tcm_gearbox_position_cb(struct sensor *sensor)
 {
   radio_event(&my_radio, RADIO_EVENT_GEARBOX, get_sensor_value(sensor, 1));
+}
+
+void event_genie_touch(struct genie_widget *widget)
+{
+  genie_set_screen(10); // menu
 }
 
 void ccm_switch_status_cb(struct sensor *sensor)

@@ -43,8 +43,8 @@ DECLARE_WIDGET("Fuel pump duty",display, 2, GENIE_OBJ_LED_DIGITS, 22, 0, 65535, 
 DECLARE_WIDGET("Fuel pressure", display, 2, GENIE_OBJ_LED_DIGITS, 23, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_FUEL_PRESSURE), 1), {});
 DECLARE_WIDGET("STFT",          display, 2, GENIE_OBJ_LED_DIGITS, 24, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_STFT), 100), {});
 DECLARE_WIDGET("STFT sign",     display, 2, GENIE_OBJ_USER_LED, 1, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, ECM, ECM_STFT)), {});
-DECLARE_WIDGET("LTFT",          display, 2, GENIE_OBJ_LED_DIGITS, 25, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_LTFT), 10), {});
-DECLARE_WIDGET("LTFT sign",     display, 2, GENIE_OBJ_USER_LED, 2, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, ECM, ECM_LTFT)), {});
+DECLARE_WIDGET("LTFT",          display, 2, GENIE_OBJ_LED_DIGITS, 25, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_LTFTL), 10), {});
+DECLARE_WIDGET("LTFT sign",     display, 2, GENIE_OBJ_USER_LED, 2, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, ECM, ECM_LTFTL)), {});
 
 // TCM
 DECLARE_WIDGET("Selector",      display, 3, GENIE_OBJ_STRING, 0, 0, 0, get_sensor_value(find_module_sensor_by_id(car, TCM, TCM_GEARBOX_POSITION_S), 1), {});
@@ -107,12 +107,39 @@ DECLARE_WIDGET("Transmission adaptation", display, 8, GENIE_OBJ_4DBUTTON, 4, 0, 
 DECLARE_WIDGET("Can poll",                display, 8, GENIE_OBJ_4DBUTTON, 5, 0, 1, widget->current_value, event_can_poll(widget));
 DECLARE_WIDGET("Key cycle",               display, 8, GENIE_OBJ_4DBUTTON, 6, 0, 1, widget->current_value, event_key_cycle(widget));
 
-DECLARE_WIDGET("Goto Imperial",           display, 9, GENIE_OBJ_WINBUTTON, 0, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto Metric",             display, 9, GENIE_OBJ_WINBUTTON, 1, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto ECM1",               display, 9, GENIE_OBJ_WINBUTTON, 2, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto TCM",                display, 9, GENIE_OBJ_WINBUTTON, 3, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto DEM",                display, 9, GENIE_OBJ_WINBUTTON, 4, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto CCM",                display, 9, GENIE_OBJ_WINBUTTON, 5, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto ECM2",               display, 9, GENIE_OBJ_WINBUTTON, 6, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto RTI-RSE",            display, 9, GENIE_OBJ_WINBUTTON, 7, 0, 1, widget->current_value, event_goto_screen(widget));
-DECLARE_WIDGET("Goto Reset",              display, 9, GENIE_OBJ_WINBUTTON, 8, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto Imperial",           display, 10, GENIE_OBJ_WINBUTTON, 0, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto Metric",             display, 10, GENIE_OBJ_WINBUTTON, 1, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto ECM1",               display, 10, GENIE_OBJ_WINBUTTON, 2, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto TCM",                display, 10, GENIE_OBJ_WINBUTTON, 3, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto DEM",                display, 10, GENIE_OBJ_WINBUTTON, 4, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto CCM",                display, 10, GENIE_OBJ_WINBUTTON, 5, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto ECM2",               display, 10, GENIE_OBJ_WINBUTTON, 6, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto RTI-RSE",            display, 10, GENIE_OBJ_WINBUTTON, 7, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto Reset",              display, 10, GENIE_OBJ_WINBUTTON, 8, 0, 1, widget->current_value, event_goto_screen(widget));
+DECLARE_WIDGET("Goto ECM3",               display, 10, GENIE_OBJ_WINBUTTON, 9, 0, 1, widget->current_value, event_goto_screen(widget));
+
+// ECM3
+DECLARE_WIDGET("Engine speed",  display, 9, GENIE_OBJ_LED_DIGITS, 45, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_ENGINE_SPEED), 1), {});
+DECLARE_WIDGET("Engine boost",  display, 9, GENIE_OBJ_LED_DIGITS, 42, 0, 65535,
+               0 /* boost gauge starts from 0 BAR */
+               + get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_BOOST_PRESSURE), HPA_TO_HBAR)
+               - get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_AMBIENT_AIR_PRESSURE), HPA_TO_HBAR), {});
+DECLARE_WIDGET("PCV",           display, 9, GENIE_OBJ_LED_DIGITS, 44, 0, 65535, pcv, {});
+DECLARE_WIDGET("Mass air flow", display, 9, GENIE_OBJ_LED_DIGITS, 43, 0, 65535, get_sensor_value(find_module_sensor_by_id(car, ECM, ECM_MAF), 1), {});
+DECLARE_WIDGET("STFT",          display, 9, GENIE_OBJ_LED_DIGITS, 40, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_STFT), 100), {});
+DECLARE_WIDGET("STFT sign",     display, 9, GENIE_OBJ_USER_LED, 18, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, ECM, ECM_STFT)), {});
+DECLARE_WIDGET("LTFTlo",        display, 9, GENIE_OBJ_LED_DIGITS, 41, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_LTFTL), 10), {});
+DECLARE_WIDGET("LTFTlo sign",   display, 9, GENIE_OBJ_USER_LED, 19, 0, 1, !get_sensor_value_sign(find_module_sensor_by_id(car, ECM, ECM_LTFTL)), {});
+DECLARE_WIDGET("LTFTm",         display, 9, GENIE_OBJ_LED_DIGITS, 46, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_LTFTM), 100), {});
+DECLARE_WIDGET("LTFThi",        display, 9, GENIE_OBJ_LED_DIGITS, 47, 0, 65535, get_sensor_abs_value(find_module_sensor_by_id(car, ECM, ECM_LTFTH), 100), {});
+
+DECLARE_WIDGET("Touch Imperial",          display, 0, GENIE_OBJ_USERBUTTON, 0, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch Metric",            display, 1, GENIE_OBJ_USERBUTTON, 1, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch ECM1",              display, 2, GENIE_OBJ_USERBUTTON, 2, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch TCM",               display, 3, GENIE_OBJ_USERBUTTON, 3, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch DEM",               display, 4, GENIE_OBJ_USERBUTTON, 4, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch CCM",               display, 5, GENIE_OBJ_USERBUTTON, 5, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch ECM2",              display, 6, GENIE_OBJ_USERBUTTON, 6, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch RTI-RSE",           display, 7, GENIE_OBJ_USERBUTTON, 7, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch Reset",             display, 8, GENIE_OBJ_USERBUTTON, 8, 0, 1, widget->current_value, event_genie_touch(widget));
+DECLARE_WIDGET("Touch ECM3",              display, 9, GENIE_OBJ_USERBUTTON, 9, 0, 1, widget->current_value, event_genie_touch(widget));

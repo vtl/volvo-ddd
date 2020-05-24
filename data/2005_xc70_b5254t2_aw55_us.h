@@ -61,7 +61,9 @@ void car_init(struct car * car)
   SET_SENSOR_PARAM(car, ECM, ECM_ENGINE_SPEED, update_interval, 500);
   DECLARE_SENSOR(car, ECM, ECM_STFT,                 "STFT",                 ARRAY(0xa6, 0x10, 0x51, 0x01), VALUE_FLOAT, (sensor->value.v_float = ((256 * bytes[5] + bytes[6]) * 2.0) / 65535));
   SET_SENSOR_PARAM(car, ECM, ECM_STFT, update_interval, 500);
-  DECLARE_SENSOR(car, ECM, ECM_LTFT,                 "LTFT",                 ARRAY(0xa6, 0x11, 0x4c, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256 * bytes[5] + bytes[6]) * 0.046875));
+  DECLARE_SENSOR(car, ECM, ECM_LTFTL,                "LTFT low",             ARRAY(0xa6, 0x11, 0x4c, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256 * bytes[5] + bytes[6]) * 0.046875));
+  DECLARE_SENSOR(car, ECM, ECM_LTFTM,                "LTFT med",             ARRAY(0xa6, 0x11, 0x4e, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256 * bytes[5] + bytes[6]) * 0.00003052));
+  DECLARE_SENSOR(car, ECM, ECM_LTFTH,                "LTFT high",            ARRAY(0xa6, 0x11, 0x50, 0x01), VALUE_FLOAT, (sensor->value.v_float = (int16_t)(256 * bytes[5] + bytes[6]) * 0.00003052));
   DECLARE_SENSOR(car, ECM, ECM_FAN_DUTY,             "Engine fan duty",      ARRAY(0xa6, 0x12, 0x48, 0x01), VALUE_INT, (sensor->value.v_int = bytes[5] * 100 / 255));
   DECLARE_SENSOR(car, ECM, ECM_MISFIRE_COUNTER,      "Misfire counter",      ARRAY(0xa6, 0x10, 0xad, 0x01), VALUE_INT, (sensor->value.v_int = 256L * bytes[5] + bytes[6]));
 
@@ -145,9 +147,9 @@ void car_init(struct car * car)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
   DECLARE_MODULE(car, CCM, "CCM", 0x29, 0x00801001, CAN_LS, UNIFRAME);
-  DECLARE_SENSOR(car, CCM, CCM_SWITCH_STATUS,        "Switch status",       ARRAY(0xa6, 0x00, 0x77, 0x01), VALUE_INT, (sensor->value.v_int = !!(bytes[5] >> 4)));
-  SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, ack_cb, ccm_switch_status_cb);
-  SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, update_interval, 100);
+//  DECLARE_SENSOR(car, CCM, CCM_SWITCH_STATUS,        "Switch status",       ARRAY(0xa6, 0x00, 0x77, 0x01), VALUE_INT, (sensor->value.v_int = !!(bytes[5] >> 4)));
+//  SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, ack_cb, ccm_switch_status_cb);
+//  SET_SENSOR_PARAM(car, CCM, CCM_SWITCH_STATUS, update_interval, 100);
   DECLARE_SENSOR(car, CCM, CCM_EVAP_TEMP,           "Evaporator temperature",ARRAY(0xa6, 0x00, 0x01, 0x01), VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625 - 100));
   DECLARE_SENSOR(car, CCM, CCM_CABIN_TEMP,          "Cabin temperature",    ARRAY(0xa6, 0x00, 0xa1, 0x01),  VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625 - 100));
   DECLARE_SENSOR(car, CCM, CCM_BLOWER_DUTY,         "Cabin fan speed",      ARRAY(0xa6, 0x00, 0x30, 0x01),  VALUE_FLOAT, (sensor->value.v_float = (256 * bytes[5] + bytes[6]) * 0.015625));
