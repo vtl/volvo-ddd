@@ -25,11 +25,7 @@ enum {
 #define CAR "data/2005_xc70_b5254t2_aw55_us.h"
 
 #include <genieArduino.h>
-#include <Preferences.h>
-#include "hw/esp32/pins.h"
-#include "hw/esp32/can.h"
-#include "hw/esp32/eeprom.h"
-#include "hw/esp32/timer.h"
+#include "hw/teensy40/hal.h"
 
 #define __ASSERT_USE_STDERR
 #include <assert.h>
@@ -163,9 +159,9 @@ typedef struct sensor {
     const char *v_string;
   } value;
   int value_type;
-  long last_update;
-  long last_used;
-  long last_subscribed;
+  unsigned long last_update;
+  unsigned long last_used;
+  unsigned long last_subscribed;
   uint8_t request_size;
   uint8_t *request_data;
   uint8_t freq;
@@ -325,15 +321,15 @@ bool widget_update(struct genie_widget *widget, bool force)
   new_value = widget->val_fn(widget);
   if (widget->object_type != GENIE_OBJ_STRING) {
     if (new_value < widget->min_value) {
-      dprintf("widget %s underflow: %d < %d\n", widget->name, new_value, widget->min_value);
+      dprintf("widget %s underflow: %ld < %ld\n", widget->name, new_value, widget->min_value);
       new_value = widget->min_value;
     } else if (new_value > widget->max_value) {
-      dprintf("widget %s overflow: %d > %d\n", widget->name, new_value, widget->max_value);
+      dprintf("widget %s overflow: %ld > %ld\n", widget->name, new_value, widget->max_value);
       new_value = widget->max_value;
     }
   }
   if (force || new_value != widget->last_value) {
-    dprintf("updating widget %s %d -> %d\n", widget->name, widget->last_value, new_value);
+    dprintf("updating widget %s %ld -> %ld\n", widget->name, widget->last_value, new_value);
     long ms = millis();
 
     if (widget->object_type == GENIE_OBJ_STRING) {
@@ -344,7 +340,7 @@ bool widget_update(struct genie_widget *widget, bool force)
     }
     widget->last_value = new_value;
     
-    dprintf("widget %s update took %d ms\n", widget->name, millis() - ms);
+    dprintf("widget %s update took %ld ms\n", widget->name, millis() - ms);
 
     if (millis() - ms > 500)
       return false;
@@ -548,7 +544,7 @@ struct module *find_module_by_can_id(struct car *car, unsigned long can_id)
   for (int m = 0; m < car->module_count; m++)
     if (car->module[m].can_id == can_id)
       return &car->module[m];
-  dprintf("can't find module by can_id %d\n", can_id);
+  dprintf("can't find module by can_id %lu\n", can_id);
 
   return NULL;
 }
@@ -1158,7 +1154,7 @@ void display_event_callback(void)
         struct genie_widget *widget = &display->widget[i];
         widget->current_value = display->genie.GetEventData(&Event);
 
-        dprintf("input %s data %d\n", widget->name, widget->current_value);
+        dprintf("input %s data %ld\n", widget->name, widget->current_value);
         if (widget->cb_fn)
           widget->cb_fn(widget);
       }
