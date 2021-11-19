@@ -126,3 +126,13 @@ const char *CANRaw::strerror(int code)
 
   return "?";
 }
+
+void can_setup()
+{
+  CAN_LS.cs_pin  = CAN_LS_CS_PIN;
+  CAN_LS.int_pin = CAN_LS_INT_PIN;
+  CAN_LS.clk     = CAN_LS_CLK;
+  CAN_HS.cs_pin  = CAN_HS_CS_PIN;
+  CAN_HS.int_pin = CAN_HS_INT_PIN;
+  CAN_HS.clk     = CAN_HS_CLK;
+}
